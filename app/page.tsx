@@ -277,7 +277,7 @@ export default function Home() {
               {!imageUrl ? (
                 <label className="mt-6 flex min-h-[330px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-950/60 px-6 text-center transition hover:border-cyan-500">
                   <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-cyan-500/10 text-3xl">
-                    ðŸ“·
+                    [IMAGE]
                   </div>
 
                   <h3 className="text-lg font-semibold">
@@ -391,7 +391,7 @@ export default function Home() {
               {!result && !analyzing && (
                 <div className="mt-6 flex min-h-[330px] items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/50 p-8 text-center">
                   <div>
-                    <div className="mb-4 text-5xl">ðŸ”¬</div>
+                    <div className="mb-4 text-5xl">[RESULT]</div>
 
                     <h3 className="text-lg font-semibold">
                       No analysis yet
@@ -454,7 +454,7 @@ export default function Home() {
                         {defects.length}
                       </p>
 
-                      <span className="text-4xl">ðŸ”Ž</span>
+                      <span className="text-4xl">[ANALYZE]</span>
                     </div>
                   </div>
 
@@ -588,7 +588,7 @@ export default function Home() {
       {/* FOOTER */}
       <footer className="border-t border-slate-800">
         <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-slate-600">
-          WeldScan â€” AI-assisted weld radiograph inspection
+          WeldScan - AI-assisted weld radiograph inspection
         </div>
       </footer>
     </main>
@@ -612,3 +612,4 @@ function ResultField({
     </div>
   );
 }
+
