@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
 
@@ -277,7 +277,7 @@ export default function Home() {
               {!imageUrl ? (
                 <label className="mt-6 flex min-h-[330px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-950/60 px-6 text-center transition hover:border-cyan-500">
                   <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-cyan-500/10 text-3xl">
-                    📷
+                    ðŸ“·
                   </div>
 
                   <h3 className="text-lg font-semibold">
@@ -349,7 +349,7 @@ export default function Home() {
               {error && (
                 <div className="mt-5 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-5">
                   <div className="flex gap-3">
-                    <div className="text-xl">⚠️</div>
+                    <div className="text-xl">âš ï¸</div>
 
                     <div>
                       <h3 className="font-bold text-yellow-300">
@@ -374,54 +374,9 @@ export default function Home() {
                 </div>
               )}
             </div>
+            </section>
 
-            {/* REFERENCE */}
-            <div className="mt-8 rounded-3xl border border-slate-800 bg-slate-900 p-6">
-              <p className="text-sm font-bold uppercase tracking-wider text-cyan-400">
-                Reference
-              </p>
-
-              <h2 className="mt-2 text-2xl font-bold">
-                Possible Defect Types
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                These are reference categories only. WeldScan should report a
-                defect only when the image provides supporting evidence.
-              </p>
-
-              <div className="mt-6 space-y-4">
-                {POSSIBLE_DEFECT_TYPES.map((group) => (
-                  <details
-                    key={group.category}
-                    className="group rounded-2xl border border-slate-800 bg-slate-950/60"
-                  >
-                    <summary className="cursor-pointer list-none p-4 font-bold text-white">
-                      <div className="flex items-center justify-between">
-                        <span>{group.category}</span>
-                        <span className="text-cyan-400 group-open:rotate-180">
-                          ▼
-                        </span>
-                      </div>
-                    </summary>
-
-                    <div className="flex flex-wrap gap-2 border-t border-slate-800 p-4">
-                      {group.types.map((type) => (
-                        <span
-                          key={`${group.category}-${type}`}
-                          className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-300"
-                        >
-                          {type}
-                        </span>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* RIGHT */}
+            {/* RIGHT */}
           <section>
             <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
               <p className="text-sm font-bold uppercase tracking-wider text-cyan-400">
@@ -436,7 +391,7 @@ export default function Home() {
               {!result && !analyzing && (
                 <div className="mt-6 flex min-h-[330px] items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/50 p-8 text-center">
                   <div>
-                    <div className="mb-4 text-5xl">🔬</div>
+                    <div className="mb-4 text-5xl">ðŸ”¬</div>
 
                     <h3 className="text-lg font-semibold">
                       No analysis yet
@@ -499,7 +454,7 @@ export default function Home() {
                         {defects.length}
                       </p>
 
-                      <span className="text-4xl">🔎</span>
+                      <span className="text-4xl">ðŸ”Ž</span>
                     </div>
                   </div>
 
@@ -633,7 +588,7 @@ export default function Home() {
       {/* FOOTER */}
       <footer className="border-t border-slate-800">
         <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-slate-600">
-          WeldScan — AI-assisted weld radiograph inspection
+          WeldScan â€” AI-assisted weld radiograph inspection
         </div>
       </footer>
     </main>
