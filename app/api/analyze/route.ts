@@ -1,519 +1,425 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 
+type WeldInfo = {
+  material?: string;
+  weldingProcess?: string;
+  jointType?: string;
+  thickness?: string;
+};
+
+type Coordinate = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type Defect = {
+  defectType: string;
+  confidence: string;
+  severity: string;
+  location: string;
+  evidence: string;
+  description: string;
+  possibleCause: string;
+  recommendedRemedy: string;
+  prevention: string;
+  coordinates?: Coordinate;
+};
+
 const geminiKey = process.env.GEMINI_API_KEY;
 const openRouterKey = process.env.OPENROUTER_API_KEY;
 
-const gemini = geminiKey
-  ? new GoogleGenAI({ apiKey: geminiKey })
-  : null;
+function cleanJson(text: string) {
+  let cleaned = text.trim();
 
-/*
- * This is a guidance taxonomy, NOT a closed list.
- * The model may report "Other Indication" when an indication
- * does not confidently fit one of these categories.
- */
-const WELD_TAXONOMY = `
-POROSITY / GAS-RELATED:
-- Gas porosity
-- Uniform porosity
-- Scattered porosity
-- Cluster porosity
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.replace(/^```json\s*/i, "");
+    cleaned = cleaned.replace(/\s*```$/i, "");
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```\s*/i, "");
+    cleaned = cleaned.replace(/\s*```$/i, "");
+  }
+
+  return cleaned.trim();
+}
+
+function normalizeConfidence(value: unknown): string {
+  if (typeof value === "number") {
+    return `${Math.max(0, Math.min(100, value))}%`;
+  }
+
+  if (typeof value === "string") {
+    const number = Number.parseFloat(value);
+
+    if (!Number.isNaN(number)) {
+      return `${Math.max(0, Math.min(100, number))}%`;
+    }
+
+    return value;
+  }
+
+  return "Unclear";
+}
+
+function normalizeSeverity(value: unknown): string {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text.includes("high")) return "High";
+  if (text.includes("moderate")) return "Moderate";
+  if (text.includes("medium")) return "Moderate";
+  if (text.includes("low")) return "Low";
+
+  return "Unclear";
+}
+
+function normalizeCoordinates(value: unknown): Coordinate | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const c = value as Record<string, unknown>;
+
+  const x = Number(c.x);
+  const y = Number(c.y);
+  const width = Number(c.width);
+  const height = Number(c.height);
+
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
+  ) {
+    return undefined;
+  }
+
+  if (width <= 0 || height <= 0) {
+    return undefined;
+  }
+
+  return {
+    x: Math.max(0, Math.min(1000, x)),
+    y: Math.max(0, Math.min(1000, y)),
+    width: Math.max(1, Math.min(1000, width)),
+    height: Math.max(1, Math.min(1000, height)),
+  };
+}
+
+function normalizeDefects(value: unknown): Defect[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => {
+    const defect = (item || {}) as Record<string, unknown>;
+
+    return {
+      defectType: String(
+        defect.defectType || "Unclassified Indication"
+      ),
+
+      confidence: normalizeConfidence(defect.confidence),
+
+      severity: normalizeSeverity(defect.severity),
+
+      location: String(
+        defect.location || "Location not confidently determined"
+      ),
+
+      evidence: String(
+        defect.evidence || "No specific radiographic evidence reported."
+      ),
+
+      description: String(
+        defect.description || "No additional description provided."
+      ),
+
+      possibleCause: String(
+        defect.possibleCause || "Possible cause not determined."
+      ),
+
+      recommendedRemedy: String(
+        defect.recommendedRemedy ||
+          "Review the indication using qualified NDT procedures."
+      ),
+
+      prevention: String(
+        defect.prevention ||
+          "Follow the applicable welding procedure and inspection controls."
+      ),
+
+      coordinates: normalizeCoordinates(defect.coordinates),
+    };
+  });
+}
+
+function normalizeResult(
+  raw: Record<string, unknown>,
+  provider: string
+) {
+  return {
+    overallAssessment: String(
+      raw.overallAssessment ||
+        "The radiograph was analyzed for visible weld indications."
+    ),
+
+    imageQuality: String(
+      raw.imageQuality || "Unclear"
+    ),
+
+    inspectionSummary: String(
+      raw.inspectionSummary ||
+        "AI-assisted preliminary radiographic assessment completed."
+    ),
+
+    defects: normalizeDefects(raw.defects),
+
+    provider,
+  };
+}
+
+function buildPrompt(
+  weldInfo: WeldInfo,
+  ndtMethod: string
+) {
+  return `
+You are WeldScan, an AI-assisted weld radiograph inspection system.
+
+Analyze the uploaded radiographic image carefully.
+
+IMPORTANT:
+This is a PRELIMINARY AI inspection.
+Do not claim certified inspection, code compliance, acceptance/rejection,
+or final engineering approval.
+
+NDT METHOD:
+${ndtMethod || "RT"}
+
+WELD INFORMATION:
+Material: ${weldInfo.material || "Not provided"}
+Welding Process: ${weldInfo.weldingProcess || "Not provided"}
+Joint Type: ${weldInfo.jointType || "Not provided"}
+Thickness: ${weldInfo.thickness || "Not provided"}
+
+YOUR TASK:
+
+1. Inspect the COMPLETE radiograph.
+2. Determine image quality.
+3. Identify visible weld indications or possible defects.
+4. Do NOT invent defects.
+5. Ignore obvious UI elements, labels, borders, text, scratches outside the weld,
+   camera reflections, screen artifacts and other non-weld objects.
+6. Consider indication shape, size, orientation, density, distribution and location.
+7. Multiple defects may exist.
+8. If no significant defect can be confidently identified, return an empty defects array.
+9. If the image is unclear, explain that clearly.
+
+DEFECT CATEGORIES MAY INCLUDE:
+
+- Porosity
+- Clustered porosity
 - Linear porosity
-- Elongated porosity
-- Wormhole / elongated cavity
-- Piping / wormhole indication
-- Surface-connected porosity
-
-INCLUSIONS:
+- Wormhole
 - Slag inclusion
 - Linear slag inclusion
-- Clustered slag inclusion
-- Isolated slag inclusion
 - Tungsten inclusion
 - Oxide inclusion
-- Metallic inclusion
-- Flux inclusion
-- Foreign-material inclusion
-
-FUSION / BONDING:
 - Lack of fusion
 - Side-wall lack of fusion
 - Inter-run lack of fusion
 - Root lack of fusion
-- Incomplete fusion
-- Cold lap / cold shut indication
-- Incomplete bonding
-
-PENETRATION / ROOT:
 - Lack of penetration
-- Incomplete penetration
 - Incomplete root penetration
-- Incomplete joint penetration
 - Excessive penetration
 - Burn-through
-- Root burn-through
-- Root concavity
-
-CRACKS:
+- Undercut
+- Overlap
+- Crack
 - Longitudinal crack
 - Transverse crack
 - Centerline crack
-- Longitudinal centerline crack
-- Transverse crack
 - Crater crack
-- Toe crack
-- Root crack
 - HAZ crack
-- Weld-metal crack
+- Root crack
+- Cold crack
 - Hot crack
-- Solidification crack
-- Hydrogen / cold crack
-- Delayed crack
-- Branching crack
-- Star crack
-- Microcrack indication
-
-CAVITIES / LOCALIZED METAL LOSS:
-- Cavity
-- Elongated cavity
-- Crater
-- Crater cavity
-- Localized metal loss
-- Excessive root erosion
-
-WELD PROFILE / GEOMETRY:
-- Undercut
-- Internal undercut
-- External undercut
-- Overlap
-- Excessive convexity
-- Excessive concavity
+- Root concavity
 - Excessive reinforcement
-- Insufficient reinforcement
-- Excessive root reinforcement
-- Insufficient root reinforcement
 - Irregular weld profile
-- Uneven bead profile
 - Misalignment
-- Hi-low / mismatch
-- Excessive root gap indication
-- Incomplete weld profile
-
-ARC / PROCESS-RELATED:
+- Distortion
 - Arc strike
-- Spatter indication
-- Tungsten arc contamination
-- Electrode inclusion
-- Wire inclusion
-- Start-stop indication
-- Crater-related indication
-- Welding interruption indication
-
-DISTORTION / DIMENSIONAL:
-- Weld distortion indication
-- Misalignment
-- Angular distortion
-- Excessive weld width
-- Irregular weld width
-- Localized profile variation
-
-OTHER RADIOGRAPHIC INDICATIONS:
-- Linear indication
-- Rounded indication
-- Diffuse indication
-- Localized density variation
-- Multiple indications
-- Combined indications
-- Clustered indications
-- Unclassified indication
+- Spatter
 - Other indication
+- Unclassified indication
 
-IMAGE / INSPECTION ARTIFACTS:
-- Film artifact
-- Digital image artifact
-- Scratch
-- Processing artifact
-- Geometric artifact
-- Foreign object / marker
-- Image noise
-- Exposure-related artifact
-- Image unclear
+====================================================
+VERY IMPORTANT: DEFECT COORDINATES
+====================================================
 
-FINAL STATES:
-- No clear defect
-- No significant indication
-- Image unclear
-`;
+For EVERY defect that you can confidently locate in the actual radiograph,
+provide approximate normalized coordinates.
 
-const PROMPT = `
-You are WeldScan, an AI-assisted weld radiograph inspection system.
+The coordinate system is:
 
-Analyze the COMPLETE radiographic image carefully.
+x = horizontal position of the TOP-LEFT of the defect
+y = vertical position of the TOP-LEFT of the defect
+width = width of defect region
+height = height of defect region
 
-Your purpose is preliminary inspection support. You are NOT a certified
-NDT inspector and must not claim certification, code compliance, or
-absolute certainty from an image alone.
+ALL values MUST be between 0 and 1000.
 
-==================================================
-CORE INSTRUCTION
-==================================================
+Example:
 
-Identify ALL reasonably visible weld discontinuities/indications.
+{
+  "coordinates": {
+    "x": 420,
+    "y": 380,
+    "width": 80,
+    "height": 120
+  }
+}
 
-A single radiograph can contain:
-- zero defects
-- one defect
-- multiple different defects
-- multiple instances of the same defect
+Meaning:
 
-Do NOT stop after finding the first indication.
+- x = 420 / 1000 = 42% from left
+- y = 380 / 1000 = 38% from top
 
-Inspect:
-1. Weld metal
-2. Fusion boundaries
-3. Root region
-4. Heat affected region when visible
-5. Surrounding material
-6. Density variations
-7. Shape, size, orientation and distribution of indications
+IMPORTANT:
+Coordinates refer ONLY to the uploaded radiograph image.
 
-==================================================
-IMPORTANT: OPEN CLASSIFICATION
-==================================================
-
-The taxonomy below is a GUIDANCE LIST, NOT A CLOSED LIST.
-
-You MAY classify an indication that is not explicitly listed.
-
-If the appearance supports a specific defect, report the most appropriate
-specific name.
-
-If the indication cannot be confidently classified:
-use "Other Indication", "Linear Indication", "Rounded Indication",
-"Unclassified Indication", or another descriptive classification.
-
-NEVER force an indication into an incorrect category merely because
-the category exists in the list.
-
-==================================================
-WELD RADIOGRAPHY TAXONOMY
-==================================================
-
-${WELD_TAXONOMY}
-
-==================================================
-RADIOGRAPHIC REASONING
-==================================================
-
-Consider:
-
-- shape
-- size
-- distribution
-- density
-- orientation
-- sharpness
-- continuity
-- location relative to weld centerline
-- location relative to root and fusion boundaries
-- clustering
-- linearity
-- rounded appearance
-- elongated appearance
-- branching appearance
-
-Do NOT treat every dark/light variation as a defect.
-
-Ignore:
-- image borders
+Do NOT create coordinates around:
+- text
 - labels
-- arrows
-- identification markers
-- obvious text
-- film/digital artifacts
-- scratches
-- exposure artifacts
+- borders
+- UI
+- screen reflections
+- camera reflections
+- black background outside the radiograph
+- scratches that are clearly not weld indications
 
-unless they affect the interpretation.
+If the exact location cannot be determined confidently,
+DO NOT invent coordinates.
+Simply omit the coordinates field.
 
-==================================================
-NO HALLUCINATION RULE
-==================================================
+The coordinates should tightly cover the visible indication,
+not the entire weld.
 
-DO NOT invent a defect.
-
-If the image does not provide enough evidence:
-
-"Image Unclear"
-
-If the weld appears free from a clearly identifiable discontinuity:
-
-"No Clear Defect"
-
-If there is an unusual indication but it cannot be classified:
-
-"Other Indication"
-
-==================================================
-CONFIDENCE
-==================================================
-
-Give an individual confidence for every indication.
-
-Confidence must reflect visual evidence.
-
-Use values such as:
-55%, 63%, 72%, 81%, 89%, 94%
-
-Do NOT use fake precision such as 99.97%.
-
-==================================================
-SEVERITY
-==================================================
-
-Use only:
-
-Low
-Moderate
-High
-Unclear
-
-Severity is an AI-assisted preliminary assessment only.
-
-Do not state that an indication is rejectable/acceptable unless the
-required code, specification, weld thickness, material and acceptance
-criteria are actually available.
-
-==================================================
-LOCATION
-==================================================
-
-Give the best visual location available, for example:
-
-- Weld center
-- Root region
-- Fusion boundary
-- Left side of weld
-- Right side of weld
-- Upper weld region
-- Lower weld region
-- HAZ
-- Approximate position along weld
-
-Do NOT invent exact measurements.
-
-==================================================
-CAUSE / REMEDY / PREVENTION
-==================================================
-
-Give technically reasonable possibilities.
-
-If the cause cannot be determined from radiography alone, say:
-
-"Cause cannot be determined from the radiograph alone."
-
-Do not pretend that the radiograph proves a manufacturing cause.
-
-==================================================
-MULTIPLE DEFECTS
-==================================================
-
-Return EVERY reasonably supported indication.
-
-For example:
-
-Porosity
-+
-Slag Inclusion
-+
-Lack of Fusion
-
-must be returned as three separate objects if all are supported.
-
-==================================================
-OUTPUT
-==================================================
+====================================================
+OUTPUT FORMAT
+====================================================
 
 Return ONLY valid JSON.
 
-Use exactly:
+Do not use markdown.
+Do not use code fences.
+Do not write explanations outside JSON.
+
+Use exactly this structure:
 
 {
-  "overallAssessment": "string",
+  "overallAssessment": "Short overall assessment",
   "imageQuality": "Good | Acceptable | Poor | Unclear",
-  "inspectionSummary": "string",
+  "inspectionSummary": "Short inspection summary",
   "defects": [
     {
-      "defectType": "string",
-      "confidence": "number%",
-      "severity": "Low | Moderate | High | Unclear",
-      "location": "string",
-      "evidence": "string",
-      "description": "string",
-      "possibleCause": "string",
-      "recommendedRemedy": "string",
-      "prevention": "string"
+      "defectType": "Slag Inclusion",
+      "confidence": "87%",
+      "severity": "High | Moderate | Low | Unclear",
+      "location": "Near weld centerline, approximately middle-left region",
+      "evidence": "Dark elongated indication inside the weld region",
+      "description": "Description of the radiographic appearance",
+      "possibleCause": "Possible welding cause",
+      "recommendedRemedy": "Recommended inspection/repair action",
+      "prevention": "Possible prevention method",
+      "coordinates": {
+        "x": 420,
+        "y": 380,
+        "width": 80,
+        "height": 120
+      }
     }
   ]
 }
 
-If no reliable defect is detected:
+If there are no confidently identifiable defects:
 
 {
-  "overallAssessment": "No Clear Defect",
+  "overallAssessment": "No clear defect identified",
   "imageQuality": "Good",
-  "inspectionSummary": "No significant radiographic indication was confidently identified.",
+  "inspectionSummary": "No significant radiographic indication could be confidently identified.",
   "defects": []
 }
 
-If the image cannot be meaningfully evaluated:
-
-{
-  "overallAssessment": "Image Unclear",
-  "imageQuality": "Unclear",
-  "inspectionSummary": "The image quality is insufficient for reliable preliminary interpretation.",
-  "defects": []
-}
+Remember:
+Never invent coordinates.
+Never invent defects.
 `;
-
-function cleanJson(text: string) {
-  return text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-}
-
-function normalizeResult(data: any) {
-  const defects = Array.isArray(data?.defects)
-    ? data.defects
-    : [];
-
-  return {
-    overallAssessment:
-      typeof data?.overallAssessment === "string"
-        ? data.overallAssessment
-        : "Analysis completed",
-
-    imageQuality:
-      typeof data?.imageQuality === "string"
-        ? data.imageQuality
-        : "Unclear",
-
-    inspectionSummary:
-      typeof data?.inspectionSummary === "string"
-        ? data.inspectionSummary
-        : "No inspection summary available.",
-
-    defects: defects.map((d: any) => ({
-      defectType:
-        typeof d?.defectType === "string"
-          ? d.defectType
-          : "Other Indication",
-
-      confidence:
-        typeof d?.confidence === "string"
-          ? d.confidence
-          : "N/A",
-
-      severity:
-        typeof d?.severity === "string"
-          ? d.severity
-          : "Unclear",
-
-      location:
-        typeof d?.location === "string"
-          ? d.location
-          : "Not determined",
-
-      evidence:
-        typeof d?.evidence === "string"
-          ? d.evidence
-          : "Not determined from the available image.",
-
-      description:
-        typeof d?.description === "string"
-          ? d.description
-          : "No description available.",
-
-      possibleCause:
-        typeof d?.possibleCause === "string"
-          ? d.possibleCause
-          : "Cause cannot be determined from the radiograph alone.",
-
-      recommendedRemedy:
-        typeof d?.recommendedRemedy === "string"
-          ? d.recommendedRemedy
-          : "Review using the applicable NDT procedure and acceptance criteria.",
-
-      prevention:
-        typeof d?.prevention === "string"
-          ? d.prevention
-          : "Follow the applicable qualified welding procedure and inspection controls.",
-    })),
-  };
-}
-
-function parseAIResponse(text: string) {
-  const cleaned = cleanJson(text);
-
-  try {
-    return normalizeResult(JSON.parse(cleaned));
-  } catch {
-    return {
-      overallAssessment: "AI Response Could Not Be Parsed",
-      imageQuality: "Unclear",
-      inspectionSummary: cleaned || "No usable response returned.",
-      defects: [],
-    };
-  }
 }
 
 async function analyzeWithGemini(
-  mimeType: string,
-  base64Data: string
+  imageUrl: string,
+  weldInfo: WeldInfo,
+  ndtMethod: string
 ) {
-  if (!gemini) {
+  if (!geminiKey) {
     throw new Error("Gemini API key is not configured.");
   }
 
   console.log("WeldScan: Trying Gemini...");
 
+  const gemini = new GoogleGenAI({
+    apiKey: geminiKey,
+  });
+
   const response = await gemini.models.generateContent({
     model: "gemini-3.6-flash",
+
     contents: [
       {
         role: "user",
         parts: [
           {
-            text: PROMPT,
+            text: buildPrompt(weldInfo, ndtMethod),
           },
           {
             inlineData: {
-              mimeType,
-              data: base64Data,
+              mimeType:
+                imageUrl.match(/^data:(image\/[^;]+);/)?.[1] ||
+                "image/jpeg",
+              data: imageUrl.replace(/^data:image\/[^;]+;base64,/, ""),
             },
           },
         ],
       },
     ],
+
+    config: {
+      temperature: 0.1,
+      responseMimeType: "application/json",
+    },
   });
 
-  const text = response.text?.trim() || "";
+  const text = response.text || "";
 
   if (!text) {
     throw new Error("Gemini returned an empty response.");
   }
 
-  return parseAIResponse(text);
+  const parsed = JSON.parse(cleanJson(text));
+
+  return normalizeResult(parsed, "Gemini");
 }
 
-async function analyzeWithOpenRouter(imageUrl: string) {
+async function analyzeWithOpenRouter(
+  imageUrl: string,
+  weldInfo: WeldInfo,
+  ndtMethod: string
+) {
   if (!openRouterKey) {
-    throw new Error(
-      "OpenRouter API key is not configured."
-    );
+    throw new Error("OpenRouter API key is not configured.");
   }
 
   console.log("WeldScan: Trying OpenRouter...");
@@ -522,22 +428,27 @@ async function analyzeWithOpenRouter(imageUrl: string) {
     "https://openrouter.ai/api/v1/chat/completions",
     {
       method: "POST",
+
       headers: {
         Authorization: `Bearer ${openRouterKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://weld-scan.vercel.app",
         "X-Title": "WeldScan",
       },
+
       body: JSON.stringify({
         model: "openrouter/free",
+
         messages: [
           {
             role: "user",
+
             content: [
               {
                 type: "text",
-                text: PROMPT,
+                text: buildPrompt(weldInfo, ndtMethod),
               },
+
               {
                 type: "image_url",
                 image_url: {
@@ -547,6 +458,12 @@ async function analyzeWithOpenRouter(imageUrl: string) {
             ],
           },
         ],
+
+        temperature: 0.1,
+
+        response_format: {
+          type: "json_object",
+        },
       }),
     }
   );
@@ -563,26 +480,29 @@ async function analyzeWithOpenRouter(imageUrl: string) {
   }
 
   const text =
-    data?.choices?.[0]?.message?.content?.trim() || "";
+    data?.choices?.[0]?.message?.content;
 
   if (!text) {
-    throw new Error(
-      "OpenRouter returned an empty response."
-    );
+    throw new Error("OpenRouter returned an empty response.");
   }
 
-  return parseAIResponse(text);
+  const parsed = JSON.parse(cleanJson(text));
+
+  return normalizeResult(parsed, "OpenRouter");
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
     const imageUrl = body?.imageUrl;
+    const weldInfo: WeldInfo = body?.weldInfo || {};
+    const ndtMethod = body?.ndtMethod || "RT";
 
-    if (!imageUrl || typeof imageUrl !== "string") {
+    if (!imageUrl) {
       return NextResponse.json(
         {
-          error: "No image provided.",
+          error: "Radiograph image is required.",
         },
         {
           status: 400,
@@ -590,14 +510,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const match = imageUrl.match(
-      /^data:(image\/[^;]+);base64,(.+)$/
-    );
-
-    if (!match) {
+    if (typeof imageUrl !== "string") {
       return NextResponse.json(
         {
-          error: "Image must be a base64 data URL.",
+          error: "Invalid image data.",
         },
         {
           status: 400,
@@ -605,71 +521,54 @@ export async function POST(request: Request) {
       );
     }
 
-    const mimeType = match[1];
-    const base64Data = match[2];
+    let result;
 
-    /*
-     * PRIMARY:
-     * Gemini
-     */
     try {
-      const result = await analyzeWithGemini(
-        mimeType,
-        base64Data
+      result = await analyzeWithGemini(
+        imageUrl,
+        weldInfo,
+        ndtMethod
       );
-
-      return NextResponse.json({
-        ...result,
-        provider: "Gemini",
-      });
-    } catch (error) {
+    } catch (geminiError) {
       console.error(
         "Gemini failed. Switching to OpenRouter:",
-        error
-      );
-    }
-
-    /*
-     * FALLBACK:
-     * OpenRouter
-     */
-    try {
-      const result = await analyzeWithOpenRouter(
-        imageUrl
+        geminiError
       );
 
-      return NextResponse.json({
-        ...result,
-        provider: "OpenRouter",
-      });
-    } catch (error) {
-      console.error(
-        "OpenRouter also failed:",
-        error
-      );
-    }
+      try {
+        result = await analyzeWithOpenRouter(
+          imageUrl,
+          weldInfo,
+          ndtMethod
+        );
+      } catch (openRouterError) {
+        console.error(
+          "OpenRouter also failed:",
+          openRouterError
+        );
 
-    return NextResponse.json(
-      {
-        error:
-          "Both AI servers are temporarily unavailable. Please try again shortly.",
-      },
-      {
-        status: 503,
+        return NextResponse.json(
+          {
+            error:
+              "Both AI servers are temporarily unavailable. Please try again shortly.",
+          },
+          {
+            status: 503,
+          }
+        );
       }
-    );
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
-    console.error(
-      "WeldScan API error:",
-      error
-    );
+    console.error("WeldScan analysis error:", error);
 
     return NextResponse.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "Analysis failed.",
+            : "Unexpected server error.",
       },
       {
         status: 500,
