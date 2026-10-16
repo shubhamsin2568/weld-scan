@@ -46,6 +46,8 @@ type WeldInfo = {
 
 type NDTMethod = "RT" | "UT" | "MT" | "PT" | "ET";
 
+type ThemeMode = "light" | "dark" | "system";
+
 type AnalysisStage =
   | "idle"
   | "reading"
@@ -138,9 +140,98 @@ export default function Home() {
   const [ndtMethod, setNdtMethod] =
     useState<NDTMethod>("RT");
 
+  /* =========================
+     THEME
+  ========================= */
+
+  const [theme, setTheme] =
+    useState<ThemeMode>("system");
+
+  const [resolvedTheme, setResolvedTheme] =
+    useState<"light" | "dark">("light");
+
   const isAnalyzing =
     stage !== "idle" &&
     stage !== "done";
+
+  /* =========================
+     LOAD SAVED THEME
+  ========================= */
+
+  useEffect(() => {
+    const savedTheme =
+      localStorage.getItem("weldscan-theme");
+
+    const initialTheme: ThemeMode =
+      savedTheme === "light" ||
+      savedTheme === "dark" ||
+      savedTheme === "system"
+        ? savedTheme
+        : "system";
+
+    setTheme(initialTheme);
+
+    const media = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    );
+
+    const applyTheme = (mode: ThemeMode) => {
+      const isDark =
+        mode === "dark" ||
+        (mode === "system" && media.matches);
+
+      setResolvedTheme(
+        isDark ? "dark" : "light"
+      );
+    };
+
+    applyTheme(initialTheme);
+
+    const handleSystemChange = () => {
+      if (initialTheme === "system") {
+        applyTheme("system");
+      }
+    };
+
+    media.addEventListener(
+      "change",
+      handleSystemChange
+    );
+
+    return () => {
+      media.removeEventListener(
+        "change",
+        handleSystemChange
+      );
+    };
+  }, []);
+
+  /* =========================
+     SAVE / APPLY THEME
+  ========================= */
+
+  useEffect(() => {
+    localStorage.setItem(
+      "weldscan-theme",
+      theme
+    );
+
+    const media = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    );
+
+    const isDark =
+      theme === "dark" ||
+      (theme === "system" && media.matches);
+
+    setResolvedTheme(
+      isDark ? "dark" : "light"
+    );
+  }, [theme]);
+
+  /* =========================
+     PREVIEW CLEANUP
+  ========================= */
 
   useEffect(() => {
     return () => {
@@ -550,10 +641,171 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <main
+      data-theme={resolvedTheme}
+      className={`min-h-screen transition-colors duration-300 ${
+        resolvedTheme === "dark"
+          ? "bg-[#05070b] text-slate-100"
+          : "bg-slate-50 text-slate-900"
+      }`}
+    >
+
+      {/* =========================
+          GLOBAL DARK THEME
+      ========================= */}
+
+      <style jsx global>{`
+        [data-theme="dark"] {
+          color-scheme: dark;
+        }
+
+        [data-theme="dark"] .bg-white {
+          background-color: #0f172a !important;
+        }
+
+        [data-theme="dark"] .bg-slate-50 {
+          background-color: #111827 !important;
+        }
+
+        [data-theme="dark"] .bg-slate-100 {
+          background-color: #1e293b !important;
+        }
+
+        [data-theme="dark"] .border {
+          border-color: #334155 !important;
+        }
+
+        [data-theme="dark"] .border-slate-200,
+        [data-theme="dark"] .border-slate-300 {
+          border-color: #334155 !important;
+        }
+
+        [data-theme="dark"] .text-slate-900 {
+          color: #f8fafc !important;
+        }
+
+        [data-theme="dark"] .text-slate-800 {
+          color: #e2e8f0 !important;
+        }
+
+        [data-theme="dark"] .text-slate-700 {
+          color: #cbd5e1 !important;
+        }
+
+        [data-theme="dark"] .text-slate-600 {
+          color: #94a3b8 !important;
+        }
+
+        [data-theme="dark"] .text-slate-500 {
+          color: #94a3b8 !important;
+        }
+
+        [data-theme="dark"] .text-slate-400 {
+          color: #64748b !important;
+        }
+
+        [data-theme="dark"] .hover\\:bg-slate-50:hover {
+          background-color: #1e293b !important;
+        }
+
+        [data-theme="dark"] input,
+        [data-theme="dark"] select {
+          background-color: #0f172a !important;
+          color: #f8fafc !important;
+          border-color: #334155 !important;
+        }
+
+        [data-theme="dark"] input::placeholder {
+          color: #64748b !important;
+        }
+
+        [data-theme="dark"] option {
+          background-color: #0f172a;
+          color: #f8fafc;
+        }
+
+        [data-theme="dark"] .bg-blue-50 {
+          background-color: #172554 !important;
+        }
+
+        [data-theme="dark"] .text-blue-950 {
+          color: #dbeafe !important;
+        }
+
+        [data-theme="dark"] .text-blue-800 {
+          color: #bfdbfe !important;
+        }
+
+        [data-theme="dark"] .text-blue-700 {
+          color: #93c5fd !important;
+        }
+
+        [data-theme="dark"] .border-blue-100 {
+          border-color: #1e3a8a !important;
+        }
+
+        [data-theme="dark"] .bg-green-50 {
+          background-color: #052e16 !important;
+        }
+
+        [data-theme="dark"] .text-green-950 {
+          color: #dcfce7 !important;
+        }
+
+        [data-theme="dark"] .text-green-700 {
+          color: #86efac !important;
+        }
+
+        [data-theme="dark"] .text-green-800 {
+          color: #bbf7d0 !important;
+        }
+
+        [data-theme="dark"] .border-green-200 {
+          border-color: #166534 !important;
+        }
+
+        [data-theme="dark"] .bg-red-50 {
+          background-color: #450a0a !important;
+        }
+
+        [data-theme="dark"] .text-red-700 {
+          color: #fca5a5 !important;
+        }
+
+        [data-theme="dark"] .text-red-600 {
+          color: #f87171 !important;
+        }
+
+        [data-theme="dark"] .border-red-100 {
+          border-color: #7f1d1d !important;
+        }
+
+        [data-theme="dark"] .border-red-200 {
+          border-color: #991b1b !important;
+        }
+
+        [data-theme="dark"] .bg-orange-50 {
+          background-color: #431407 !important;
+        }
+
+        [data-theme="dark"] .text-orange-700 {
+          color: #fdba74 !important;
+        }
+
+        [data-theme="dark"] .bg-slate-950 {
+          background-color: #020617 !important;
+        }
+      `}</style>
+
 
       {/* HEADER */}
-      <header className="border-b bg-white">
+      <header
+        className={`border-b ${
+          resolvedTheme === "dark"
+            ? "border-slate-800 bg-[#0b1120]"
+            : "border-slate-200 bg-white"
+        }`}
+      >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
 
           <div>
@@ -566,8 +818,79 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
-            RT • AI Inspection
+
+          <div className="flex items-center gap-3">
+
+            {/* THEME SELECTOR */}
+            <div
+              className={`flex items-center gap-1 rounded-xl border p-1 ${
+                resolvedTheme === "dark"
+                  ? "border-slate-700 bg-slate-900"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+
+              <button
+                type="button"
+                onClick={() => setTheme("light")}
+                title="Day mode"
+                className={`rounded-lg px-3 py-2 text-sm transition ${
+                  theme === "light"
+                    ? "bg-blue-600 text-white"
+                    : resolvedTheme === "dark"
+                    ? "text-slate-300 hover:bg-slate-800"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                ☀️
+              </button>
+
+
+              <button
+                type="button"
+                onClick={() => setTheme("system")}
+                title="System default"
+                className={`rounded-lg px-3 py-2 text-sm transition ${
+                  theme === "system"
+                    ? "bg-blue-600 text-white"
+                    : resolvedTheme === "dark"
+                    ? "text-slate-300 hover:bg-slate-800"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                🖥️
+              </button>
+
+
+              <button
+                type="button"
+                onClick={() => setTheme("dark")}
+                title="Dark mode"
+                className={`rounded-lg px-3 py-2 text-sm transition ${
+                  theme === "dark"
+                    ? "bg-blue-600 text-white"
+                    : resolvedTheme === "dark"
+                    ? "text-slate-300 hover:bg-slate-800"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                🌙
+              </button>
+
+            </div>
+
+
+            {/* RT BADGE */}
+            <div
+              className={`hidden rounded-full border px-4 py-2 text-xs font-bold sm:block ${
+                resolvedTheme === "dark"
+                  ? "border-blue-900 bg-blue-950 text-blue-300"
+                  : "border-blue-100 bg-blue-50 text-blue-700"
+              }`}
+            >
+              RT • AI Inspection
+            </div>
+
           </div>
 
         </div>
@@ -1105,12 +1428,6 @@ export default function Home() {
 
                 <div className="overflow-auto rounded-2xl bg-black p-4">
 
-                  {/* IMPORTANT:
-                      Image + marker overlay are inside
-                      the SAME relative container.
-                      This makes coordinates align correctly.
-                  */}
-
                   <div className="relative mx-auto w-fit max-w-full">
 
                     <img
@@ -1127,8 +1444,6 @@ export default function Home() {
                       className="block h-auto"
                     />
 
-
-                    {/* RED DEFECT MARKERS */}
 
                     {result?.defects?.map(
                       (defect, index) => {
@@ -1150,8 +1465,6 @@ export default function Home() {
                             }}
                           >
 
-                            {/* LABEL */}
-
                             <div className="absolute -top-8 left-0 whitespace-nowrap rounded-md bg-red-600 px-2 py-1 text-xs font-black text-white shadow-lg">
 
                               {index + 1}.{" "}
@@ -1159,9 +1472,6 @@ export default function Home() {
                                 "Indication"}
 
                             </div>
-
-
-                            {/* CENTER DOT */}
 
                             <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,1)]" />
 
@@ -1177,7 +1487,6 @@ export default function Home() {
               )}
 
 
-              {/* VIEWER CONTROLS */}
               {previewUrl && (
                 <div className="mt-4 flex items-center justify-center gap-2">
 
