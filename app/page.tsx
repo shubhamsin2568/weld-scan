@@ -28,67 +28,6 @@ type AnalysisResult = {
   defects?: Defect[];
 };
 
-const POSSIBLE_DEFECT_TYPES = [
-  {
-    category: "Gas / Cavity Discontinuities",
-    types: [
-      "Scattered Porosity",
-      "Clustered Porosity",
-      "Linear Porosity",
-      "Aligned Porosity",
-      "Elongated Porosity",
-      "Wormhole Porosity",
-      "Surface-Connected Porosity",
-      "Blowhole",
-      "Gas Cavity",
-      "Pipe",
-      "Wormhole",
-    ],
-  },
-  {
-    category: "Solid Inclusions",
-    types: [
-      "Slag Inclusion",
-      "Linear Slag Inclusion",
-      "Clustered Slag Inclusion",
-      "Tungsten Inclusion",
-      "Oxide Inclusion",
-      "Flux Inclusion",
-      "Metallic Inclusion",
-    ],
-  },
-  {
-    category: "Cracks",
-    types: [
-      "Longitudinal Crack",
-      "Transverse Crack",
-      "Crater Crack",
-      "Hot Crack",
-      "Cold Crack",
-    ],
-  },
-  {
-    category: "Fusion / Penetration",
-    types: [
-      "Lack of Fusion",
-      "Incomplete Fusion",
-      "Incomplete Penetration",
-      "Lack of Penetration",
-    ],
-  },
-  {
-    category: "Geometry / Other",
-    types: [
-      "Undercut",
-      "Overlap",
-      "Burn Through",
-      "Excess Reinforcement",
-      "Concavity",
-      "Misalignment",
-    ],
-  },
-];
-
 export default function Home() {
   const [imageUrl, setImageUrl] = useState("");
   const [fileName, setFileName] = useState("");
@@ -97,13 +36,21 @@ export default function Home() {
   const [error, setError] = useState("");
   const [retrySeconds, setRetrySeconds] = useState(0);
 
-  useEffect(() => {
-    if (retrySeconds <= 0) return;
+  /*
+   * ---------------------------------------------------------
+   * RETRY COUNTDOWN
+   * ---------------------------------------------------------
+   */
 
-    const timer = setInterval(() => {
+  useEffect(() => {
+    if (retrySeconds <= 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
       setRetrySeconds((seconds) => {
         if (seconds <= 1) {
-          clearInterval(timer);
+          window.clearInterval(timer);
           return 0;
         }
 
@@ -111,16 +58,27 @@ export default function Home() {
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+    };
   }, [retrySeconds]);
+
+  /*
+   * ---------------------------------------------------------
+   * IMAGE UPLOAD
+   * ---------------------------------------------------------
+   */
 
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file.");
+      setError("Please select a valid weld radiograph image.");
+      setRetrySeconds(0);
       return;
     }
 
@@ -135,15 +93,25 @@ export default function Home() {
     };
 
     reader.onerror = () => {
-      setError("Unable to read this image. Please try another image.");
+      setError(
+        "Unable to read this image. Please select another radiograph."
+      );
+      setRetrySeconds(0);
     };
 
     reader.readAsDataURL(file);
   }
 
+  /*
+   * ---------------------------------------------------------
+   * ANALYZE RADIOGRAPH
+   * ---------------------------------------------------------
+   */
+
   async function analyzeRadiograph() {
     if (!imageUrl) {
       setError("Please upload a weld radiograph first.");
+      setRetrySeconds(0);
       return;
     }
 
@@ -168,39 +136,61 @@ export default function Home() {
 
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        const message =
-          typeof data?.error === "string"
-            ? data.error
-            : "Analysis service is temporarily unavailable.";
+      /*
+       * -------------------------------------------------------
+       * SERVER / AI ERRORS
+       * -------------------------------------------------------
+       *
+       * Do NOT show raw API/Gemini JSON to the user.
+       */
 
-        if (response.status === 429) {
+      if (!response.ok) {
+        if (response.status === 503) {
           setError(
-            "AI service limit reached. Please wait a moment before trying again."
+            "The AI server is currently busy. Please wait a moment before trying again."
           );
-          setRetrySeconds(20);
-        } else if (response.status === 503) {
+        } else if (response.status === 429) {
           setError(
-            "AI service is temporarily busy. Please wait a moment and try again."
+            "The AI service is temporarily unavailable. Please wait a moment before trying again."
           );
-          setRetrySeconds(15);
+        } else if (response.status >= 500) {
+          setError(
+            "The AI server is temporarily unavailable. Please wait a moment before trying again."
+          );
         } else {
-          setError(message);
+          setError(
+            "Unable to complete the analysis right now. Please try again after a moment."
+          );
         }
+
+        /*
+         * One-minute retry countdown
+         */
+        setRetrySeconds(60);
 
         return;
       }
 
       setResult(data);
     } catch {
+      /*
+       * Network / connection error
+       */
       setError(
-        "Unable to connect to the AI service. Please check your connection and try again."
+        "Unable to connect to the AI server right now. Please wait a moment before trying again."
       );
-      setRetrySeconds(10);
+
+      setRetrySeconds(60);
     } finally {
       setAnalyzing(false);
     }
   }
+
+  /*
+   * ---------------------------------------------------------
+   * REMOVE IMAGE
+   * ---------------------------------------------------------
+   */
 
   function removeImage() {
     setImageUrl("");
@@ -209,6 +199,12 @@ export default function Home() {
     setError("");
     setRetrySeconds(0);
   }
+
+  /*
+   * ---------------------------------------------------------
+   * GET DEFECTS
+   * ---------------------------------------------------------
+   */
 
   function getDefects(): Defect[] {
     if (result?.defects && Array.isArray(result.defects)) {
@@ -236,6 +232,25 @@ export default function Home() {
 
   const defects = getDefects();
 
+  /*
+   * ---------------------------------------------------------
+   * TIMER DISPLAY
+   * ---------------------------------------------------------
+   */
+
+  const minutes = Math.floor(retrySeconds / 60);
+  const seconds = retrySeconds % 60;
+
+  const formattedTime = `${String(minutes).padStart(2, "0")}:${String(
+    seconds
+  ).padStart(2, "0")}`;
+
+  /*
+   * ---------------------------------------------------------
+   * UI
+   * ---------------------------------------------------------
+   */
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       {/* HEADER */}
@@ -259,7 +274,10 @@ export default function Home() {
       {/* MAIN */}
       <div className="mx-auto max-w-7xl px-6 py-8">
         <div className="grid gap-8 lg:grid-cols-2">
-          {/* LEFT */}
+          {/* =====================================================
+              LEFT SECTION
+          ====================================================== */}
+
           <section>
             <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
               <p className="text-sm font-bold uppercase tracking-wider text-cyan-400">
@@ -274,6 +292,7 @@ export default function Home() {
                 Select a weld radiographic image for preliminary AI analysis.
               </p>
 
+              {/* UPLOAD BOX */}
               {!imageUrl ? (
                 <label className="mt-6 flex min-h-[330px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-950/60 px-6 text-center transition hover:border-cyan-500">
                   <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-cyan-500/10 text-3xl">
@@ -301,7 +320,7 @@ export default function Home() {
                 </label>
               ) : (
                 <div className="mt-6">
-                  {/* IMAGE */}
+                  {/* IMAGE PREVIEW */}
                   <div className="overflow-hidden rounded-2xl border border-slate-700 bg-black">
                     <img
                       src={imageUrl}
@@ -310,7 +329,7 @@ export default function Home() {
                     />
                   </div>
 
-                  {/* FILE */}
+                  {/* FILE INFORMATION */}
                   <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -324,13 +343,13 @@ export default function Home() {
 
                     <button
                       onClick={removeImage}
-                      className="shrink-0 rounded-lg border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/10"
+                      className="shrink-0 rounded-lg border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
                     >
                       Remove
                     </button>
                   </div>
 
-                  {/* ANALYZE */}
+                  {/* ANALYZE BUTTON */}
                   <button
                     onClick={analyzeRadiograph}
                     disabled={analyzing || retrySeconds > 0}
@@ -339,44 +358,74 @@ export default function Home() {
                     {analyzing
                       ? "Analyzing Radiograph..."
                       : retrySeconds > 0
-                        ? `Try Again in ${retrySeconds}s`
+                        ? `Retry Available in ${formattedTime}`
                         : "Analyze Radiograph"}
                   </button>
                 </div>
               )}
 
-              {/* FRIENDLY ERROR */}
+              {/* =================================================
+                  SERVER ERROR CARD
+              ================================================== */}
+
               {error && (
-                <div className="mt-5 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-5">
-                  <div className="flex gap-3">
-                    <div className="text-xl">âš ï¸</div>
+                <div className="mt-5 overflow-hidden rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
+                  <div className="p-6">
+                    <div className="flex items-start gap-4">
+                      {/* WARNING ICON */}
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-yellow-500/10 text-2xl">
+                        ⚠️
+                      </div>
 
-                    <div>
-                      <h3 className="font-bold text-yellow-300">
-                        AI Analysis Temporarily Unavailable
-                      </h3>
+                      {/* ERROR TITLE */}
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-bold text-yellow-300">
+                          AI Server Temporarily Unavailable
+                        </h3>
 
-                      <p className="mt-2 text-sm leading-6 text-slate-300">
-                        {error}
-                      </p>
-
-                      {retrySeconds === 0 && (
-                        <button
-                          onClick={analyzeRadiograph}
-                          disabled={analyzing}
-                          className="mt-4 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-cyan-300 disabled:opacity-50"
-                        >
-                          Try Again
-                        </button>
-                      )}
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                          {error}
+                        </p>
+                      </div>
                     </div>
+
+                    {/* COUNTDOWN */}
+                    {retrySeconds > 0 && (
+                      <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950 p-5 text-center">
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                          Retry Available In
+                        </p>
+
+                        <p className="mt-2 text-4xl font-bold tabular-nums text-cyan-400">
+                          {formattedTime}
+                        </p>
+
+                        <p className="mt-2 text-xs text-slate-600">
+                          Please wait until the countdown finishes.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* TRY AGAIN BUTTON */}
+                    {retrySeconds === 0 && (
+                      <button
+                        onClick={analyzeRadiograph}
+                        disabled={analyzing}
+                        className="mt-5 w-full rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Try Again
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
             </div>
-            </section>
+          </section>
 
-            {/* RIGHT */}
+          {/* =====================================================
+              RIGHT SECTION
+          ====================================================== */}
+
           <section>
             <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
               <p className="text-sm font-bold uppercase tracking-wider text-cyan-400">
@@ -387,7 +436,7 @@ export default function Home() {
                 AI Inspection Results
               </h2>
 
-              {/* EMPTY */}
+              {/* EMPTY STATE */}
               {!result && !analyzing && (
                 <div className="mt-6 flex min-h-[330px] items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/50 p-8 text-center">
                   <div>
@@ -405,7 +454,7 @@ export default function Home() {
                 </div>
               )}
 
-              {/* LOADING */}
+              {/* LOADING STATE */}
               {analyzing && (
                 <div className="mt-6 flex min-h-[330px] items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-8 text-center">
                   <div>
@@ -426,10 +475,13 @@ export default function Home() {
                 </div>
               )}
 
-              {/* 🔬 */}
+              {/* =================================================
+                  RESULTS
+              ================================================== */}
+
               {result && !analyzing && (
                 <div className="mt-6">
-                  {/* OVERALL */}
+                  {/* OVERALL RESULT */}
                   <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
                       Overall Result
@@ -443,7 +495,7 @@ export default function Home() {
                     </p>
                   </div>
 
-                  {/* COUNT */}
+                  {/* DETECTED COUNT */}
                   <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-5">
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
                       Detected Indications
@@ -458,7 +510,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* NO DEFECT */}
+                  {/* NO CLEAR DEFECT */}
                   {defects.length === 0 && (
                     <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
                       <h3 className="font-bold text-emerald-300">
@@ -472,12 +524,13 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* DEFECTS */}
+                  {/* DEFECT DETAILS */}
                   {defects.map((defect, index) => (
                     <div
                       key={`${defect.type || "defect"}-${index}`}
                       className="mt-5 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950"
                     >
+                      {/* DEFECT HEADER */}
                       <div className="border-b border-slate-800 bg-slate-900 p-5">
                         <div className="flex items-center justify-between gap-3">
                           <div>
@@ -508,6 +561,7 @@ export default function Home() {
                         </div>
                       </div>
 
+                      {/* DEFECT INFORMATION */}
                       <div className="space-y-5 p-5">
                         {defect.confidence !== undefined && (
                           <ResultField
@@ -565,7 +619,7 @@ export default function Home() {
                     </div>
                   ))}
 
-                  {/* NOTICE */}
+                  {/* INSPECTION NOTICE */}
                   <div className="mt-6 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-5">
                     <p className="text-xs font-bold uppercase tracking-wider text-yellow-400">
                       Inspection Notice
@@ -595,6 +649,12 @@ export default function Home() {
   );
 }
 
+/*
+ * =============================================================
+ * RESULT FIELD
+ * =============================================================
+ */
+
 function ResultField({
   title,
   value,
@@ -612,6 +672,3 @@ function ResultField({
     </div>
   );
 }
-
-
-
