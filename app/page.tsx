@@ -44,7 +44,7 @@ type WeldInfo = {
   thickness: string;
 };
 
-type NDTMethod = "RT" | "UT" | "MT" | "PT" | "ET";
+type NDTMethod = "RT" | "UT";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -799,6 +799,7 @@ export default function Home() {
 
 
       {/* HEADER */}
+
       <header
         className={`border-b ${
           resolvedTheme === "dark"
@@ -822,6 +823,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
 
             {/* THEME SELECTOR */}
+
             <div
               className={`flex items-center gap-1 rounded-xl border p-1 ${
                 resolvedTheme === "dark"
@@ -880,7 +882,8 @@ export default function Home() {
             </div>
 
 
-            {/* RT BADGE */}
+            {/* DYNAMIC NDT BADGE */}
+
             <div
               className={`hidden rounded-full border px-4 py-2 text-xs font-bold sm:block ${
                 resolvedTheme === "dark"
@@ -888,7 +891,7 @@ export default function Home() {
                   : "border-blue-100 bg-blue-50 text-blue-700"
               }`}
             >
-              RT • AI Inspection
+              {ndtMethod} • AI Inspection
             </div>
 
           </div>
@@ -900,6 +903,7 @@ export default function Home() {
       <div className="mx-auto max-w-7xl px-6 py-8">
 
         {/* ERROR */}
+
         {error && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
             {error}
@@ -908,14 +912,17 @@ export default function Home() {
 
 
         {/* MAIN GRID */}
+
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
 
 
           {/* LEFT CONTROL PANEL */}
+
           <aside className="space-y-6">
 
 
             {/* UPLOAD */}
+
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
 
               <div className="mb-4">
@@ -930,6 +937,7 @@ export default function Home() {
 
 
               {!previewUrl ? (
+
                 <div
                   onDragOver={(event) => {
                     event.preventDefault();
@@ -974,7 +982,9 @@ export default function Home() {
                   </div>
 
                 </div>
+
               ) : (
+
                 <div className="overflow-hidden rounded-2xl border bg-slate-950">
 
                   <img
@@ -1016,6 +1026,7 @@ export default function Home() {
 
 
             {/* WELD INFORMATION */}
+
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
 
               <h2 className="text-lg font-bold">
@@ -1139,7 +1150,8 @@ export default function Home() {
             </section>
 
 
-            {/* NDT METHOD */}
+            {/* NDT METHOD — RT + UT ONLY */}
+
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
 
               <h2 className="text-lg font-bold">
@@ -1147,50 +1159,42 @@ export default function Home() {
               </h2>
 
               <p className="mb-4 text-sm text-slate-500">
-                Radiographic Testing is currently active.
+                Select the NDT method for this inspection.
               </p>
 
 
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 gap-2">
 
-                {(
-                  [
-                    ["RT", true],
-                    ["UT", false],
-                    ["MT", false],
-                    ["PT", false],
-                    ["ET", false],
-                  ] as [NDTMethod, boolean][]
-                ).map(([method, active]) => (
+                {(["RT", "UT"] as NDTMethod[]).map(
+                  (method) => (
 
-                  <button
-                    key={method}
-                    disabled={!active}
-                    onClick={() =>
-                      active && setNdtMethod(method)
-                    }
-                    className={`rounded-xl px-2 py-3 text-center ${
-                      ndtMethod === method
-                        ? "bg-blue-600 text-white"
-                        : active
-                        ? "bg-slate-100 text-slate-700"
-                        : "cursor-not-allowed bg-slate-50 text-slate-300"
-                    }`}
-                  >
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() =>
+                        setNdtMethod(method)
+                      }
+                      className={`rounded-xl px-2 py-3 text-center transition ${
+                        ndtMethod === method
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
 
-                    <div className="font-black">
-                      {method}
-                    </div>
-
-                    {!active && (
-                      <div className="mt-1 text-[10px]">
-                        Soon
+                      <div className="font-black">
+                        {method}
                       </div>
-                    )}
 
-                  </button>
+                      <div className="mt-1 text-[10px]">
+                        {method === "RT"
+                          ? "Radiographic"
+                          : "Ultrasonic"}
+                      </div>
 
-                ))}
+                    </button>
+
+                  )
+                )}
 
               </div>
 
@@ -1198,6 +1202,7 @@ export default function Home() {
 
 
             {/* ANALYZE BUTTON */}
+
             <button
               onClick={analyzeImage}
               disabled={!file || isAnalyzing}
@@ -1212,6 +1217,7 @@ export default function Home() {
 
 
             {/* ANALYSIS PROGRESS */}
+
             {isAnalyzing && (
               <section className="rounded-2xl border bg-white p-5 shadow-sm">
 
@@ -1277,6 +1283,7 @@ export default function Home() {
 
 
             {/* NOTICE */}
+
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
 
               <strong>Inspection Notice:</strong>{" "}
@@ -1292,10 +1299,12 @@ export default function Home() {
 
 
           {/* RIGHT SIDE */}
+
           <section className="space-y-6">
 
 
             {/* DASHBOARD */}
+
             {result && (
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
 
@@ -1356,6 +1365,7 @@ export default function Home() {
 
 
             {/* VIEWER */}
+
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
 
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1532,6 +1542,7 @@ export default function Home() {
 
 
             {/* RESULTS */}
+
             {result && (
               <section className="rounded-2xl border bg-white p-6 shadow-sm">
 
@@ -1560,6 +1571,7 @@ export default function Home() {
 
 
                 {/* OVERALL */}
+
                 <div className="mb-6 rounded-2xl bg-blue-50 p-5">
 
                   <div className="text-xs font-black uppercase tracking-wide text-blue-700">
@@ -1574,6 +1586,7 @@ export default function Home() {
 
 
                 {/* SUMMARY */}
+
                 <div className="mb-8">
 
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">
@@ -1588,6 +1601,7 @@ export default function Home() {
 
 
                 {/* DEFECTS */}
+
                 <div>
 
                   <div className="mb-4 flex items-center justify-between">
@@ -1832,6 +1846,7 @@ export default function Home() {
 
 
             {/* EMPTY STATE */}
+
             {!result && previewUrl && (
               <section className="rounded-2xl border bg-white p-8 text-center shadow-sm">
 
@@ -1860,6 +1875,7 @@ export default function Home() {
 
 
         {/* FOOTER */}
+
         <footer className="mt-10 border-t pt-6 text-center text-xs leading-6 text-slate-400">
 
           WeldScan AI-assisted preliminary inspection.
