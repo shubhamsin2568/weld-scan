@@ -798,7 +798,9 @@ export default function Home() {
       `}</style>
 
 
-      {/* HEADER */}
+      {/* =========================
+          HEADER
+      ========================= */}
 
       <header
         className={`border-b ${
@@ -916,7 +918,9 @@ export default function Home() {
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
 
 
-          {/* LEFT CONTROL PANEL */}
+          {/* =========================
+              LEFT CONTROL PANEL
+          ========================= */}
 
           <aside className="space-y-6">
 
@@ -996,6 +1000,7 @@ export default function Home() {
                   <div className="flex gap-2 bg-slate-900 p-3">
 
                     <button
+                      type="button"
                       onClick={replaceImage}
                       className="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-bold text-slate-800"
                     >
@@ -1003,6 +1008,7 @@ export default function Home() {
                     </button>
 
                     <button
+                      type="button"
                       onClick={removeImage}
                       className="flex-1 rounded-lg bg-red-500 px-3 py-2 text-sm font-bold text-white"
                     >
@@ -1150,7 +1156,10 @@ export default function Home() {
             </section>
 
 
-            {/* NDT METHOD — RT + UT ONLY */}
+            {/* =========================
+                NDT METHOD
+                RT AVAILABLE / UT COMING SOON
+            ========================= */}
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
 
@@ -1165,36 +1174,58 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-2">
 
-                {(["RT", "UT"] as NDTMethod[]).map(
-                  (method) => (
+                {/* RT — AVAILABLE */}
 
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() =>
-                        setNdtMethod(method)
-                      }
-                      className={`rounded-xl px-2 py-3 text-center transition ${
-                        ndtMethod === method
-                          ? "bg-blue-600 text-white"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      }`}
-                    >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNdtMethod("RT")
+                  }
+                  className={`rounded-xl px-2 py-3 text-center transition ${
+                    ndtMethod === "RT"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
 
-                      <div className="font-black">
-                        {method}
-                      </div>
+                  <div className="font-black">
+                    RT
+                  </div>
 
-                      <div className="mt-1 text-[10px]">
-                        {method === "RT"
-                          ? "Radiographic"
-                          : "Ultrasonic"}
-                      </div>
+                  <div className="mt-1 text-[10px]">
+                    Radiographic
+                  </div>
 
-                    </button>
+                  <div className="mt-1 text-[9px] font-semibold">
+                    Available
+                  </div>
 
-                  )
-                )}
+                </button>
+
+
+                {/* UT — COMING SOON */}
+
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  title="UT inspection is coming soon"
+                  className="relative cursor-not-allowed rounded-xl bg-slate-100 px-2 py-3 text-center text-slate-400 opacity-80"
+                >
+
+                  <div className="font-black">
+                    UT
+                  </div>
+
+                  <div className="mt-1 text-[10px]">
+                    Ultrasonic
+                  </div>
+
+                  <div className="mt-1 inline-block rounded-full bg-slate-200 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">
+                    Coming Soon
+                  </div>
+
+                </button>
 
               </div>
 
@@ -1204,6 +1235,7 @@ export default function Home() {
             {/* ANALYZE BUTTON */}
 
             <button
+              type="button"
               onClick={analyzeImage}
               disabled={!file || isAnalyzing}
               className="w-full rounded-2xl bg-blue-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
@@ -1298,7 +1330,9 @@ export default function Home() {
           </aside>
 
 
-          {/* RIGHT SIDE */}
+          {/* =========================
+              RIGHT SIDE
+          ========================= */}
 
           <section className="space-y-6">
 
@@ -1387,6 +1421,7 @@ export default function Home() {
                   <div className="flex items-center gap-2">
 
                     <button
+                      type="button"
                       onClick={() =>
                         setViewMode("original")
                       }
@@ -1400,6 +1435,7 @@ export default function Home() {
                     </button>
 
                     <button
+                      type="button"
                       onClick={() =>
                         setViewMode("enhanced")
                       }
@@ -1501,6 +1537,7 @@ export default function Home() {
                 <div className="mt-4 flex items-center justify-center gap-2">
 
                   <button
+                    type="button"
                     onClick={() =>
                       setZoom(
                         Math.max(50, zoom - 10)
@@ -1516,6 +1553,7 @@ export default function Home() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() =>
                       setZoom(
                         Math.min(200, zoom + 10)
@@ -1527,6 +1565,7 @@ export default function Home() {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() =>
                       setZoom(100)
                     }
@@ -1561,6 +1600,7 @@ export default function Home() {
 
 
                   <button
+                    type="button"
                     onClick={generateReport}
                     className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700"
                   >
@@ -1848,23 +1888,24 @@ export default function Home() {
             {/* EMPTY STATE */}
 
             {!result && previewUrl && (
-              <section className="rounded-2xl border bg-white p-8 text-center shadow-sm">
+              <section className="rounded-2xl border bg-white p-6 shadow-sm">
 
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-3xl">
-                  🔎
-                </div>
-
-                <h2 className="mt-4 text-xl font-black">
+                <h2 className="text-lg font-bold">
                   Ready for Inspection
                 </h2>
 
-                <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
-                  Fill in the optional weld information
-                  and click Analyze Radiograph. WeldScan
-                  will inspect the complete image and,
-                  where possible, mark detected indications
-                  directly on the radiograph.
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Your radiograph is ready. Review the
+                  image and weld information, then start
+                  the AI-assisted inspection.
                 </p>
+
+                <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+
+                  <strong>Current Method:</strong>{" "}
+                  Radiographic Testing (RT)
+
+                </div>
 
               </section>
             )}
