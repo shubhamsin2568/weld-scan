@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, DragEvent, useEffect, useState } from "react";
 
 type Defect = {
   defectType?: string;
@@ -22,596 +22,546 @@ type AnalysisResult = {
   defects?: Defect[];
 };
 
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
+
+const allowedTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/tiff",
+  "image/bmp",
+];
+
 export default function Home() {
-  const [imageUrl, setImageUrl] = useState("");
-  const [fileName, setFileName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const [retrySeconds, setRetrySeconds] = useState(0);
 
-  /*
-   * ---------------------------------------------------------
-   * RETRY COUNTDOWN
-   * ---------------------------------------------------------
-   */
-
   useEffect(() => {
-    if (retrySeconds <= 0) {
-      return;
-    }
+    if (retrySeconds <= 0) return;
 
-    const timer = window.setInterval(() => {
-      setRetrySeconds((seconds) => {
-        if (seconds <= 1) {
-          window.clearInterval(timer);
-          return 0;
-        }
-
-        return seconds - 1;
-      });
+    const timer = setInterval(() => {
+      setRetrySeconds((prev) => Math.max(prev - 1, 0));
     }, 1000);
 
-    return () => window.clearInterval(timer);
+    return () => clearInterval(timer);
   }, [retrySeconds]);
 
-  /*
-   * ---------------------------------------------------------
-   * IMAGE UPLOAD
-   * ---------------------------------------------------------
-   */
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
-  function handleImageChange(
-    event: ChangeEvent<HTMLInputElement>
-  ) {
-    const file = event.target.files?.[0];
+  const handleSelectedFile = (selectedFile: File) => {
+    setError("");
+    setResult(null);
 
+    if (!allowedTypes.includes(selectedFile.type)) {
+      setError(
+        "Please upload a JPG, PNG, WEBP, TIFF or BMP radiograph image."
+      );
+      return;
+    }
+
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setError("Image size must be less than 15 MB.");
+      return;
+    }
+
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
+    setFile(selectedFile);
+    setPreview(URL.createObjectURL(selectedFile));
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+
+    if (selectedFile) {
+      handleSelectedFile(selectedFile);
+    }
+
+    e.target.value = "";
+  };
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsDragging(false);
+
+    const droppedFile = e.dataTransfer.files?.[0];
+
+    if (droppedFile) {
+      handleSelectedFile(droppedFile);
+    }
+  };
+
+  const removeImage = () => {
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
+    setFile(null);
+    setPreview("");
+    setResult(null);
+    setError("");
+  };
+
+  const analyzeImage = async () => {
     if (!file) {
+      setError("Please upload a radiograph image first.");
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
-      setError(
-        "Please select a valid weld radiograph image."
-      );
-      setRetrySeconds(0);
-      return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      setImageUrl(String(reader.result));
-      setFileName(file.name);
-      setResult(null);
-      setError("");
-      setRetrySeconds(0);
-    };
-
-    reader.onerror = () => {
-      setError(
-        "Unable to read this image. Please select another radiograph."
-      );
-      setRetrySeconds(0);
-    };
-
-    reader.readAsDataURL(file);
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * ANALYZE RADIOGRAPH
-   * ---------------------------------------------------------
-   */
-
-  async function analyzeRadiograph() {
-    if (!imageUrl) {
-      setError(
-        "Please upload a weld radiograph first."
-      );
-      setRetrySeconds(0);
-      return;
-    }
-
-    if (retrySeconds > 0) {
-      return;
-    }
-
-    setAnalyzing(true);
+    setLoading(true);
     setError("");
     setResult(null);
 
     try {
+      const imageUrl = await fileToDataUrl(file);
+
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          imageUrl,
-        }),
+        body: JSON.stringify({ imageUrl }),
       });
 
-      const data = await response.json().catch(
-        () => ({})
-      );
+      const data = await response.json();
 
       if (!response.ok) {
-        if (response.status === 503) {
-          setError(
-            "Both AI servers are temporarily unavailable. Please wait a moment and try again."
-          );
-        } else if (response.status === 429) {
-          setError(
-            "The AI service is temporarily busy. Please wait a moment and try again."
-          );
-        } else if (response.status >= 500) {
-          setError(
-            "The AI server is temporarily unavailable. Please wait a moment and try again."
-          );
-        } else {
-          setError(
-            "Unable to complete the analysis right now. Please try again."
+        if (response.status === 503 || response.status === 429) {
+          setRetrySeconds(60);
+          throw new Error(
+            "AI Server Temporarily Unavailable. Please try again shortly."
           );
         }
 
-        setRetrySeconds(60);
-        return;
+        throw new Error(
+          data?.error || "Unable to analyze the radiograph."
+        );
       }
 
       setResult(data);
-    } catch {
+    } catch (err) {
       setError(
-        "Unable to connect to the AI server right now. Please wait a moment and try again."
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while analyzing the image."
       );
-
-      setRetrySeconds(60);
     } finally {
-      setAnalyzing(false);
+      setLoading(false);
     }
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * REMOVE IMAGE
-   * ---------------------------------------------------------
-   */
-
-  function removeImage() {
-    setImageUrl("");
-    setFileName("");
-    setResult(null);
-    setError("");
-    setRetrySeconds(0);
-  }
-
-  const defects = Array.isArray(result?.defects)
-    ? result.defects
-    : [];
-
-  /*
-   * ---------------------------------------------------------
-   * TIMER
-   * ---------------------------------------------------------
-   */
-
-  const minutes = Math.floor(
-    retrySeconds / 60
-  );
-
-  const seconds = retrySeconds % 60;
-
-  const formattedTime = `${String(minutes).padStart(
-    2,
-    "0"
-  )}:${String(seconds).padStart(2, "0")}`;
-
-  /*
-   * ---------------------------------------------------------
-   * UI
-   * ---------------------------------------------------------
-   */
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
 
-      {/* =====================================================
-          HEADER
-      ====================================================== */}
+      {/* HEADER */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
 
-      <header className="border-b border-slate-800 bg-slate-950">
-        <div className="mx-auto max-w-7xl px-6 py-7">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold text-white">
+              W
+            </div>
 
-          <p className="text-sm font-bold uppercase tracking-[0.25em] text-cyan-400">
-            WeldScan
-          </p>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">
+                WeldScan
+              </h1>
 
-          <h1 className="mt-2 text-3xl font-bold sm:text-4xl">
-            AI Weld Radiograph Inspection
-          </h1>
+              <p className="text-xs text-slate-500">
+                Radiographic Inspection
+              </p>
+            </div>
+          </div>
 
-          <p className="mt-3 max-w-3xl text-slate-400">
-            Upload a weld radiograph and use AI-assisted
-            analysis to identify possible radiographic
-            indications and weld discontinuities.
-          </p>
-
+          <div className="hidden rounded-full bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 sm:block">
+            AI-Assisted Weld Inspection
+          </div>
         </div>
       </header>
 
-      {/* =====================================================
-          MAIN
-      ====================================================== */}
+      {/* MAIN */}
+      <section className="mx-auto max-w-7xl px-5 py-10 sm:px-6">
 
-      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-8">
+          <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-600">
+            Weld Radiograph Analyzer
+          </p>
+
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+            Inspect weld radiographs with AI
+          </h2>
+
+          <p className="mt-3 max-w-3xl text-slate-600">
+            Upload a weld radiograph and WeldScan will analyze visible
+            indications, possible defects, severity, evidence and recommended
+            actions.
+          </p>
+        </div>
 
         <div className="grid gap-8 lg:grid-cols-2">
 
-          {/* =================================================
-              LEFT
-          ================================================== */}
+          {/* UPLOAD CARD */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
 
-          <section>
-
-            <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-
-              <p className="text-sm font-bold uppercase tracking-wider text-cyan-400">
-                Step 01
-              </p>
-
-              <h2 className="mt-2 text-2xl font-bold">
+            <div className="mb-5">
+              <h3 className="text-lg font-bold text-slate-900">
                 Upload Radiograph
-              </h2>
+              </h3>
 
-              <p className="mt-2 text-sm text-slate-400">
-                Select a weld radiographic image for
-                preliminary AI analysis.
+              <p className="mt-1 text-sm text-slate-500">
+                Upload a clear weld radiographic image for preliminary AI
+                analysis.
               </p>
+            </div>
 
-              {/* UPLOAD */}
+            {!preview ? (
 
-              {!imageUrl ? (
+              /* DRAG DROP AREA */
+              <div
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-200 ${
+                  isDragging
+                    ? "scale-[1.01] border-blue-600 bg-blue-50"
+                    : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40"
+                }`}
+              >
 
-                <label className="mt-6 flex min-h-[330px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-950/60 px-6 text-center transition hover:border-cyan-500">
+                <div className="mx-auto flex max-w-md flex-col items-center">
 
-                  <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-cyan-500/10 text-3xl">
-                    📷
+                  <div
+                    className={`mb-5 flex h-16 w-16 items-center justify-center rounded-2xl text-2xl ${
+                      isDragging
+                        ? "bg-blue-600 text-white"
+                        : "bg-blue-100 text-blue-600"
+                    }`}
+                  >
+                    {isDragging ? "↓" : "↑"}
                   </div>
 
-                  <h3 className="text-lg font-semibold">
-                    Upload weld radiograph
-                  </h3>
+                  <h4 className="text-lg font-semibold text-slate-800">
+                    {isDragging
+                      ? "Drop your image here"
+                      : "Drag & Drop your radiograph"}
+                  </h4>
 
-                  <p className="mt-2 max-w-md text-sm text-slate-500">
-                    JPG, JPEG, PNG, WEBP or another
-                    supported image format.
+                  <p className="mt-2 text-sm text-slate-500">
+                    or select an image from your device
                   </p>
 
-                  <span className="mt-6 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950">
-                    Choose Image
-                  </span>
+                  <label className="mt-6 cursor-pointer rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
+                    Select Image
 
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-
-                </label>
-
-              ) : (
-
-                <div className="mt-6">
-
-                  {/* IMAGE */}
-
-                  <div className="overflow-hidden rounded-2xl border border-slate-700 bg-black">
-
-                    <img
-                      src={imageUrl}
-                      alt="Uploaded weld radiograph"
-                      className="max-h-[520px] w-full object-contain"
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp,.tiff,.bmp,image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
                     />
+                  </label>
 
+                  <p className="mt-4 text-xs text-slate-400">
+                    JPG, PNG, WEBP, TIFF or BMP • Maximum 15 MB
+                  </p>
+
+                </div>
+              </div>
+
+            ) : (
+
+              /* IMAGE PREVIEW */
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+
+                <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800">
+                      {file?.name}
+                    </p>
+
+                    <p className="text-xs text-slate-500">
+                      {file ? formatFileSize(file.size) : ""}
+                    </p>
                   </div>
-
-                  {/* FILE */}
-
-                  <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
-
-                    <div className="min-w-0">
-
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Selected Image
-                      </p>
-
-                      <p className="mt-1 truncate text-sm font-semibold">
-                        {fileName}
-                      </p>
-
-                    </div>
-
-                    <button
-                      onClick={removeImage}
-                      className="shrink-0 rounded-lg border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
-                    >
-                      Remove
-                    </button>
-
-                  </div>
-
-                  {/* ANALYZE */}
 
                   <button
-                    onClick={analyzeRadiograph}
-                    disabled={
-                      analyzing ||
-                      retrySeconds > 0
-                    }
-                    className="mt-5 w-full rounded-xl bg-cyan-400 px-6 py-4 text-base font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={removeImage}
+                    className="ml-3 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                   >
-
-                    {analyzing
-                      ? "Analyzing Radiograph..."
-                      : retrySeconds > 0
-                        ? `Retry Available in ${formattedTime}`
-                        : "Analyze Radiograph"}
-
+                    Remove
                   </button>
 
                 </div>
 
-              )}
+                <div className="flex min-h-[360px] items-center justify-center bg-slate-100 p-4">
 
-              {/* ERROR */}
+                  <img
+                    src={preview}
+                    alt="Uploaded weld radiograph"
+                    className="max-h-[520px] max-w-full rounded-lg object-contain shadow-sm"
+                  />
 
-              {error && (
+                </div>
+              </div>
+            )}
 
-                <div className="mt-5 overflow-hidden rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
+            {/* ANALYZE BUTTON */}
+            <button
+              onClick={analyzeImage}
+              disabled={!file || loading || retrySeconds > 0}
+              className={`mt-5 w-full rounded-xl px-5 py-3.5 text-sm font-semibold text-white transition ${
+                !file || loading || retrySeconds > 0
+                  ? "cursor-not-allowed bg-slate-300"
+                  : "bg-blue-600 shadow-sm hover:bg-blue-700"
+              }`}
+            >
+              {loading
+                ? "Analyzing Radiograph..."
+                : retrySeconds > 0
+                ? `Retry Available in ${formatTime(retrySeconds)}`
+                : "Analyze Radiograph"}
+            </button>
 
-                  <div className="p-6">
+            {/* ERROR */}
+            {error && (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
 
-                    <div className="flex items-start gap-4">
+                <div className="flex gap-3">
 
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-yellow-500/10 text-2xl">
-                        ⚠️
-                      </div>
+                  <div className="text-lg">
+                    ⚠️
+                  </div>
 
-                      <div className="min-w-0">
+                  <div>
 
-                        <h3 className="text-lg font-bold text-yellow-300">
-                          AI Server Temporarily Unavailable
-                        </h3>
+                    <p className="font-semibold text-amber-900">
+                      {retrySeconds > 0
+                        ? "AI Server Temporarily Unavailable"
+                        : "Analysis Error"}
+                    </p>
 
-                        <p className="mt-2 text-sm leading-6 text-slate-400">
-                          {error}
-                        </p>
-
-                      </div>
-
-                    </div>
+                    <p className="mt-1 text-sm text-amber-800">
+                      {error}
+                    </p>
 
                     {retrySeconds > 0 && (
-
-                      <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950 p-5 text-center">
-
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                          Retry Available In
-                        </p>
-
-                        <p className="mt-2 text-4xl font-bold tabular-nums text-cyan-400">
-                          {formattedTime}
-                        </p>
-
-                        <p className="mt-2 text-xs text-slate-600">
-                          Please wait until the countdown finishes.
-                        </p>
-
-                      </div>
-
-                    )}
-
-                    {retrySeconds === 0 && (
-
-                      <button
-                        onClick={analyzeRadiograph}
-                        disabled={analyzing}
-                        className="mt-5 w-full rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Try Again
-                      </button>
-
+                      <p className="mt-2 text-xs text-amber-700">
+                        Please wait for the retry timer and try again.
+                      </p>
                     )}
 
                   </div>
 
                 </div>
+              </div>
+            )}
 
+            {/* NOTICE */}
+            <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+
+              <p className="text-xs leading-5 text-blue-800">
+                <strong>Inspection Notice:</strong> WeldScan provides
+                AI-assisted preliminary inspection. Results should be reviewed
+                by a qualified NDT professional and should not be treated as
+                certified inspection results.
+              </p>
+
+            </div>
+
+          </div>
+
+          {/* RESULTS CARD */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+            <div className="mb-5 flex items-center justify-between">
+
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Inspection Results
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  AI-generated radiograph assessment
+                </p>
+              </div>
+
+              {result?.provider && (
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  {result.provider}
+                </span>
               )}
 
             </div>
 
-          </section>
+            {!result ? (
 
-          {/* =================================================
-              RIGHT
-          ================================================== */}
+              <div className="flex min-h-[500px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center">
 
-          <section>
+                <div>
 
-            <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-
-              <p className="text-sm font-bold uppercase tracking-wider text-cyan-400">
-                Step 02
-              </p>
-
-              <h2 className="mt-2 text-2xl font-bold">
-                AI Inspection Results
-              </h2>
-
-              {/* EMPTY */}
-
-              {!result && !analyzing && (
-
-                <div className="mt-6 flex min-h-[330px] items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/50 p-8 text-center">
-
-                  <div>
-
-                    <div className="mb-4 text-5xl">
-                      🔬
-                    </div>
-
-                    <h3 className="text-lg font-semibold">
-                      No analysis yet
-                    </h3>
-
-                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                      Upload a radiograph and click
-                      Analyze Radiograph to see the
-                      inspection result here.
-                    </p>
-
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
+                    🔍
                   </div>
+
+                  <h4 className="font-semibold text-slate-800">
+                    No analysis yet
+                  </h4>
+
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
+                    Upload a weld radiograph and click{" "}
+                    <strong>Analyze Radiograph</strong> to see the inspection
+                    result here.
+                  </p>
 
                 </div>
 
-              )}
+              </div>
 
-              {/* LOADING */}
+            ) : (
 
-              {analyzing && (
+              <div className="space-y-5">
 
-                <div className="mt-6 flex min-h-[330px] items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-8 text-center">
+                {/* OVERALL */}
+                <div
+                  className={`rounded-xl border p-5 ${
+                    isNoDefect(result)
+                      ? "border-green-200 bg-green-50"
+                      : "border-blue-100 bg-blue-50"
+                  }`}
+                >
 
-                  <div>
+                  <div className="flex items-start gap-3">
 
-                    <div className="mx-auto mb-5 h-12 w-12 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
-
-                    <h3 className="text-lg font-semibold">
-                      Analyzing radiograph
-                    </h3>
-
-                    <p className="mt-2 text-sm text-slate-500">
-                      Examining visible radiographic
-                      indications...
-                    </p>
-
-                    <p className="mt-4 text-xs text-slate-600">
-                      This may take a few seconds.
-                    </p>
-
-                  </div>
-
-                </div>
-
-              )}
-
-              {/* =================================================
-                  RESULTS
-              ================================================== */}
-
-              {result && !analyzing && (
-
-                <div className="mt-6">
-
-                  {/* OVERALL */}
-
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-
-                    <div className="flex items-start justify-between gap-4">
-
-                      <div>
-
-                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Overall Assessment
-                        </p>
-
-                        <p className="mt-2 text-xl font-bold">
-                          {result.overallAssessment ||
-                            "Analysis Completed"}
-                        </p>
-
-                      </div>
-
-                      {result.provider && (
-
-                        <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-bold text-cyan-300">
-                          {result.provider}
-                        </span>
-
-                      )}
-
+                    <div className="text-xl">
+                      {isNoDefect(result) ? "✓" : "🔎"}
                     </div>
 
-                    {result.inspectionSummary && (
+                    <div>
 
-                      <p className="mt-4 text-sm leading-6 text-slate-400">
-                        {result.inspectionSummary}
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Overall Assessment
                       </p>
 
-                    )}
-
-                  </div>
-
-                  {/* IMAGE QUALITY */}
-
-                  {result.imageQuality && (
-
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-
-                      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-
-                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Image Quality
-                        </p>
-
-                        <p className="mt-2 font-bold text-cyan-300">
-                          {result.imageQuality}
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-
-                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Indications
-                        </p>
-
-                        <p className="mt-1 text-3xl font-bold text-cyan-400">
-                          {defects.length}
-                        </p>
-
-                      </div>
+                      <p className="mt-1 font-semibold leading-6 text-slate-900">
+                        {result.overallAssessment ||
+                          "No overall assessment provided."}
+                      </p>
 
                     </div>
 
-                  )}
+                  </div>
 
-                  {/* NO DEFECT */}
+                </div>
 
-                  {defects.length === 0 && (
+                {/* STATS */}
+                <div className="grid gap-3 sm:grid-cols-3">
 
-                    <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6">
+                  <StatCard
+                    label="Image Quality"
+                    value={result.imageQuality || "Unclear"}
+                  />
 
-                      <div className="flex items-start gap-4">
+                  <StatCard
+                    label="Indications"
+                    value={String(result.defects?.length || 0)}
+                  />
 
-                        <div className="text-3xl">
+                  <StatCard
+                    label="AI Provider"
+                    value={result.provider || "AI"}
+                  />
+
+                </div>
+
+                {/* SUMMARY */}
+                {result.inspectionSummary && (
+                  <ResultField
+                    title="Inspection Summary"
+                    value={result.inspectionSummary}
+                  />
+                )}
+
+                {/* DEFECTS */}
+                <div>
+
+                  <div className="mb-3 flex items-center justify-between">
+
+                    <h4 className="font-bold text-slate-900">
+                      Detected Indications
+                    </h4>
+
+                    <span className="text-xs text-slate-500">
+                      {result.defects?.length || 0} found
+                    </span>
+
+                  </div>
+
+                  {result.defects && result.defects.length > 0 ? (
+
+                    <div className="space-y-4">
+
+                      {result.defects.map((defect, index) => (
+                        <DefectCard
+                          key={`${defect.defectType}-${index}`}
+                          defect={defect}
+                          index={index}
+                        />
+                      ))}
+
+                    </div>
+
+                  ) : (
+
+                    <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+
+                      <div className="flex gap-3">
+
+                        <div className="text-xl text-green-600">
                           ✓
                         </div>
 
                         <div>
 
-                          <h3 className="font-bold text-emerald-300">
-                            {result.overallAssessment ===
-                            "Image Unclear"
-                              ? "Image Unclear"
-                              : "No Clear Defect"}
-                          </h3>
+                          <p className="font-semibold text-green-900">
+                            No Clear Defect Detected
+                          </p>
 
-                          <p className="mt-2 text-sm leading-6 text-slate-400">
-                            {result.inspectionSummary ||
-                              "No significant radiographic indication was confidently identified."}
+                          <p className="mt-1 text-sm leading-6 text-green-800">
+                            No significant defect indication was identified in
+                            the submitted radiograph.
                           </p>
 
                         </div>
@@ -619,97 +569,23 @@ export default function Home() {
                       </div>
 
                     </div>
-
                   )}
-
-                  {/* MULTIPLE DEFECTS */}
-
-                  {defects.length > 0 && (
-
-                    <div className="mt-6">
-
-                      <div className="mb-4 flex items-end justify-between">
-
-                        <div>
-
-                          <p className="text-xs font-bold uppercase tracking-wider text-cyan-400">
-                            Detected Indications
-                          </p>
-
-                          <h3 className="mt-1 text-xl font-bold">
-                            {defects.length} indication
-                            {defects.length === 1
-                              ? ""
-                              : "s"}
-                            detected
-                          </h3>
-
-                        </div>
-
-                        <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-bold text-slate-400">
-                          AI-assisted
-                        </span>
-
-                      </div>
-
-                      {/* DEFECT CARDS */}
-
-                      <div className="space-y-5">
-
-                        {defects.map(
-                          (defect, index) => (
-
-                            <DefectCard
-                              key={`${defect.defectType || "indication"}-${index}`}
-                              defect={defect}
-                              index={index}
-                            />
-
-                          )
-                        )}
-
-                      </div>
-
-                    </div>
-
-                  )}
-
-                  {/* INSPECTION NOTICE */}
-
-                  <div className="mt-6 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-5">
-
-                    <p className="text-xs font-bold uppercase tracking-wider text-yellow-400">
-                      Inspection Notice
-                    </p>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                      This AI result is preliminary inspection
-                      support only. It does not replace evaluation
-                      by a qualified NDT inspector, radiographer,
-                      welding engineer, or applicable welding/NDT
-                      code and acceptance criteria.
-                    </p>
-
-                  </div>
 
                 </div>
 
-              )}
+              </div>
+            )}
 
-            </div>
-
-          </section>
+          </div>
 
         </div>
-
-      </div>
+      </section>
 
       {/* FOOTER */}
+      <footer className="border-t border-slate-200 bg-white">
 
-      <footer className="border-t border-slate-800">
-
-        <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-slate-600">
-          WeldScan - AI-assisted weld radiograph inspection
+        <div className="mx-auto max-w-7xl px-6 py-6 text-center text-xs text-slate-500">
+          WeldScan • AI-Assisted Weld Radiograph Inspection
         </div>
 
       </footer>
@@ -718,11 +594,8 @@ export default function Home() {
   );
 }
 
-/*
- * =============================================================
- * DEFECT CARD
- * =============================================================
- */
+
+/* DEFECT CARD */
 
 function DefectCard({
   defect,
@@ -731,131 +604,87 @@ function DefectCard({
   defect: Defect;
   index: number;
 }) {
-  const severity =
-    defect.severity || "Unclear";
+  const severity = (defect.severity || "Unclear").toLowerCase();
 
   const severityClass =
-    severity === "High"
-      ? "border-red-500/30 bg-red-500/10 text-red-300"
-      : severity === "Moderate"
-        ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
-        : severity === "Low"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-          : "border-slate-700 bg-slate-800 text-slate-300";
+    severity === "high"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : severity === "moderate"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : severity === "low"
+      ? "border-green-200 bg-green-50 text-green-700"
+      : "border-slate-200 bg-slate-50 text-slate-600";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
 
-      {/* HEADER */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4">
 
-      <div className="border-b border-slate-800 bg-slate-900 p-5">
+        <div>
 
-        <div className="flex items-start justify-between gap-4">
+          <p className="text-xs font-medium text-slate-500">
+            Indication #{index + 1}
+          </p>
 
-          <div className="flex gap-4">
+          <h5 className="mt-1 text-base font-bold text-slate-900">
+            {defect.defectType || "Unclassified Indication"}
+          </h5>
 
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 font-bold text-cyan-400">
-              {index + 1}
-            </div>
+        </div>
 
-            <div>
+        <div className="flex items-center gap-2">
 
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Indication {index + 1}
-              </p>
-
-              <h3 className="mt-1 text-xl font-bold">
-                {defect.defectType ||
-                  "Other Indication"}
-              </h3>
-
-            </div>
-
-          </div>
+          {defect.confidence !== undefined && (
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              {formatConfidence(defect.confidence)} confidence
+            </span>
+          )}
 
           <span
-            className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${severityClass}`}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${severityClass}`}
           >
-            {severity}
+            {defect.severity || "Unclear"} severity
           </span>
 
         </div>
 
       </div>
 
-      {/* CONTENT */}
-
-      <div className="space-y-5 p-5">
+      <div className="space-y-4 p-4">
 
         <div className="grid gap-4 sm:grid-cols-2">
 
-          {defect.confidence !== undefined && (
-
-            <ResultField
-              title="Confidence"
-              value={String(
-                defect.confidence
-              )}
-              highlight
-            />
-
-          )}
-
-          {defect.location && (
-
-            <ResultField
-              title="Location"
-              value={defect.location}
-            />
-
-          )}
-
-        </div>
-
-        {defect.evidence && (
+          <ResultField
+            title="Location"
+            value={defect.location}
+          />
 
           <ResultField
-            title="Radiographic Evidence"
+            title="Evidence"
             value={defect.evidence}
           />
 
-        )}
+        </div>
 
-        {defect.description && (
+        <ResultField
+          title="Description"
+          value={defect.description}
+        />
 
-          <ResultField
-            title="Description"
-            value={defect.description}
-          />
+        <ResultField
+          title="Possible Cause"
+          value={defect.possibleCause}
+        />
 
-        )}
+        <ResultField
+          title="Recommended Remedy"
+          value={defect.recommendedRemedy}
+        />
 
-        {defect.possibleCause && (
-
-          <ResultField
-            title="Possible Cause"
-            value={defect.possibleCause}
-          />
-
-        )}
-
-        {defect.recommendedRemedy && (
-
-          <ResultField
-            title="Recommended Remedy"
-            value={defect.recommendedRemedy}
-          />
-
-        )}
-
-        {defect.prevention && (
-
-          <ResultField
-            title="Prevention"
-            value={defect.prevention}
-          />
-
-        )}
+        <ResultField
+          title="Prevention"
+          value={defect.prevention}
+        />
 
       </div>
 
@@ -863,38 +692,115 @@ function DefectCard({
   );
 }
 
-/*
- * =============================================================
- * RESULT FIELD
- * =============================================================
- */
+
+/* RESULT FIELD */
 
 function ResultField({
   title,
   value,
-  highlight = false,
 }: {
   title: string;
-  value: string;
-  highlight?: boolean;
+  value?: string;
 }) {
+  if (!value) return null;
+
   return (
     <div>
 
-      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
         {title}
       </p>
 
-      <p
-        className={`mt-2 text-sm leading-6 ${
-          highlight
-            ? "font-bold text-cyan-300"
-            : "text-slate-300"
-        }`}
-      >
+      <p className="text-sm leading-6 text-slate-700">
         {value}
       </p>
 
     </div>
   );
+}
+
+
+/* STAT CARD */
+
+function StatCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+      <p className="text-xs font-medium text-slate-500">
+        {label}
+      </p>
+
+      <p className="mt-1 truncate text-sm font-bold text-slate-900">
+        {value}
+      </p>
+
+    </div>
+  );
+}
+
+
+/* HELPERS */
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatConfidence(value: string | number) {
+  const text = String(value);
+
+  return text.includes("%") ? text : `${text}%`;
+}
+
+function formatTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(
+    remainingSeconds
+  ).padStart(2, "0")}`;
+}
+
+function isNoDefect(result: AnalysisResult) {
+  if (!result.defects || result.defects.length === 0) {
+    return true;
+  }
+
+  return result.defects.every((defect) => {
+    const type = (defect.defectType || "").toLowerCase();
+
+    return (
+      type.includes("no clear defect") ||
+      type.includes("no significant indication")
+    );
+  });
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Unable to read the selected image."));
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error("Unable to read the selected image."));
+    };
+
+    reader.readAsDataURL(file);
+  });
 }
