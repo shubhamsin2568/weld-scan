@@ -113,36 +113,27 @@ export default function Home() {
 
   const [dragActive, setDragActive] = useState(false);
 
-  const [result, setResult] =
-    useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const [error, setError] = useState("");
 
-  const [stage, setStage] =
-    useState<AnalysisStage>("idle");
-
-  const [stageText, setStageText] =
-    useState("");
+  const [stage, setStage] = useState<AnalysisStage>("idle");
+  const [stageText, setStageText] = useState("");
 
   const [zoom, setZoom] = useState(100);
 
   const [viewMode, setViewMode] =
     useState<"original" | "enhanced">("original");
 
-  const [weldInfo, setWeldInfo] =
-    useState<WeldInfo>({
-      material: "",
-      weldingProcess: "",
-      jointType: "",
-      thickness: "",
-    });
+  const [weldInfo, setWeldInfo] = useState<WeldInfo>({
+    material: "",
+    weldingProcess: "",
+    jointType: "",
+    thickness: "",
+  });
 
   const [ndtMethod, setNdtMethod] =
     useState<NDTMethod>("RT");
-
-  /* =========================
-     THEME
-  ========================= */
 
   const [theme, setTheme] =
     useState<ThemeMode>("system");
@@ -151,11 +142,10 @@ export default function Home() {
     useState<"light" | "dark">("light");
 
   const isAnalyzing =
-    stage !== "idle" &&
-    stage !== "done";
+    stage !== "idle" && stage !== "done";
 
   /* =========================
-     LOAD SAVED THEME
+     THEME INITIALIZATION
   ========================= */
 
   useEffect(() => {
@@ -176,13 +166,11 @@ export default function Home() {
     );
 
     const applyTheme = (mode: ThemeMode) => {
-      const isDark =
+      const dark =
         mode === "dark" ||
         (mode === "system" && media.matches);
 
-      setResolvedTheme(
-        isDark ? "dark" : "light"
-      );
+      setResolvedTheme(dark ? "dark" : "light");
     };
 
     applyTheme(initialTheme);
@@ -207,7 +195,7 @@ export default function Home() {
   }, []);
 
   /* =========================
-     SAVE / APPLY THEME
+     SAVE THEME
   ========================= */
 
   useEffect(() => {
@@ -220,13 +208,11 @@ export default function Home() {
       "(prefers-color-scheme: dark)"
     );
 
-    const isDark =
+    const dark =
       theme === "dark" ||
       (theme === "system" && media.matches);
 
-    setResolvedTheme(
-      isDark ? "dark" : "light"
-    );
+    setResolvedTheme(dark ? "dark" : "light");
   }, [theme]);
 
   /* =========================
@@ -277,6 +263,10 @@ export default function Home() {
     return "No Clear Defect";
   }, [result, highestSeverity, defects.length]);
 
+  /* =========================
+     FILE SELECTION
+  ========================= */
+
   function selectFile(selectedFile: File) {
     setError("");
 
@@ -296,7 +286,8 @@ export default function Home() {
       URL.revokeObjectURL(previewUrl);
     }
 
-    const url = URL.createObjectURL(selectedFile);
+    const url =
+      URL.createObjectURL(selectedFile);
 
     setFile(selectedFile);
     setPreviewUrl(url);
@@ -304,12 +295,14 @@ export default function Home() {
     setStage("idle");
     setStageText("");
     setZoom(100);
+    setViewMode("original");
   }
 
   function handleFileInput(
     event: ChangeEvent<HTMLInputElement>
   ) {
-    const selectedFile = event.target.files?.[0];
+    const selectedFile =
+      event.target.files?.[0];
 
     if (selectedFile) {
       selectFile(selectedFile);
@@ -318,11 +311,14 @@ export default function Home() {
     event.target.value = "";
   }
 
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
+  function handleDrop(
+    event: DragEvent<HTMLDivElement>
+  ) {
     event.preventDefault();
     setDragActive(false);
 
-    const droppedFile = event.dataTransfer.files?.[0];
+    const droppedFile =
+      event.dataTransfer.files?.[0];
 
     if (droppedFile) {
       selectFile(droppedFile);
@@ -341,33 +337,57 @@ export default function Home() {
     setStage("idle");
     setStageText("");
     setZoom(100);
+    setViewMode("original");
   }
 
   function replaceImage() {
     fileInputRef.current?.click();
   }
 
-  async function fileToDataUrl(selectedFile: File) {
+  /* =========================
+     FILE TO DATA URL
+  ========================= */
+
+  async function fileToDataUrl(
+    selectedFile: File
+  ) {
     return await new Promise<string>(
       (resolve, reject) => {
         const reader = new FileReader();
 
-        reader.onload = () =>
+        reader.onload = () => {
           resolve(String(reader.result));
+        };
 
-        reader.onerror = () =>
+        reader.onerror = () => {
           reject(
-            new Error("Could not read the image.")
+            new Error(
+              "Could not read the image."
+            )
           );
+        };
 
         reader.readAsDataURL(selectedFile);
       }
     );
   }
 
+  /* =========================
+     ANALYZE IMAGE
+  ========================= */
+
   async function analyzeImage() {
     if (!file) {
-      setError("Please upload a radiograph first.");
+      setError(
+        "Please upload a radiograph first."
+      );
+      return;
+    }
+
+    if (ndtMethod !== "RT") {
+      setError(
+        "UT inspection is coming soon. RT is currently available."
+      );
       return;
     }
 
@@ -378,7 +398,8 @@ export default function Home() {
       setStage("reading");
       setStageText("Reading image");
 
-      const imageUrl = await fileToDataUrl(file);
+      const imageUrl =
+        await fileToDataUrl(file);
 
       setStage("inspecting");
       setStageText("Inspecting weld");
@@ -388,7 +409,9 @@ export default function Home() {
       );
 
       setStage("identifying");
-      setStageText("Identifying indications");
+      setStageText(
+        "Identifying indications"
+      );
 
       const response = await fetch(
         "/api/analyze",
@@ -405,7 +428,8 @@ export default function Home() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -438,14 +462,19 @@ export default function Home() {
     }
   }
 
+  /* =========================
+     PROFESSIONAL REPORT
+  ========================= */
+
   function generateReport() {
     if (!result) return;
 
-    const reportWindow = window.open(
-      "",
-      "_blank",
-      "width=1000,height=800"
-    );
+    const reportWindow =
+      window.open(
+        "",
+        "_blank",
+        "width=1100,height=850"
+      );
 
     if (!reportWindow) {
       setError(
@@ -454,92 +483,508 @@ export default function Home() {
       return;
     }
 
+    const reportId =
+      `WS-${new Date().getFullYear()}-${Date.now()
+        .toString()
+        .slice(-8)}`;
+
+    const inspectionDate =
+      new Date().toLocaleString();
+
     const defectRows = defects
       .map(
         (defect, index) => `
-          <section class="defect">
-            <h2>${index + 1}. ${escapeHtml(
-          defect.defectType
-        )}</h2>
+          <div class="defect-card">
+            <div class="defect-header">
+              <div>
+                <div class="defect-number">
+                  INDICATION ${String(index + 1).padStart(
+                    2,
+                    "0"
+                  )}
+                </div>
 
-            <p><strong>Confidence:</strong> ${escapeHtml(
-              String(defect.confidence || "Unclear")
-            )}</p>
+                <h2>
+                  ${escapeHtml(
+                    defect.defectType ||
+                      "Unclassified Indication"
+                  )}
+                </h2>
+              </div>
 
-            <p><strong>Severity:</strong> ${escapeHtml(
-              defect.severity
-            )}</p>
+              <div class="severity">
+                ${escapeHtml(
+                  defect.severity ||
+                    "Unclear"
+                )}
+              </div>
+            </div>
 
-            <p><strong>Location:</strong> ${escapeHtml(
-              defect.location
-            )}</p>
+            <div class="grid">
+              <div>
+                <span>Confidence</span>
+                <strong>
+                  ${escapeHtml(
+                    String(
+                      defect.confidence ||
+                        "Unclear"
+                    )
+                  )}
+                </strong>
+              </div>
 
-            <p><strong>Evidence:</strong> ${escapeHtml(
-              defect.evidence
-            )}</p>
+              <div>
+                <span>Location</span>
+                <strong>
+                  ${escapeHtml(
+                    defect.location ||
+                      "Not specified"
+                  )}
+                </strong>
+              </div>
+            </div>
 
-            <p><strong>Description:</strong> ${escapeHtml(
-              defect.description
-            )}</p>
+            <div class="info-block">
+              <h3>Evidence</h3>
+              <p>
+                ${escapeHtml(
+                  defect.evidence ||
+                    "Not provided."
+                )}
+              </p>
+            </div>
 
-            <p><strong>Possible Cause:</strong> ${escapeHtml(
-              defect.possibleCause
-            )}</p>
+            <div class="info-block">
+              <h3>Description</h3>
+              <p>
+                ${escapeHtml(
+                  defect.description ||
+                    "Not provided."
+                )}
+              </p>
+            </div>
 
-            <p><strong>Recommended Remedy:</strong> ${escapeHtml(
-              defect.recommendedRemedy
-            )}</p>
+            <div class="two-column">
+              <div class="info-block">
+                <h3>Possible Cause</h3>
+                <p>
+                  ${escapeHtml(
+                    defect.possibleCause ||
+                      "Not provided."
+                  )}
+                </p>
+              </div>
 
-            <p><strong>Prevention:</strong> ${escapeHtml(
-              defect.prevention
-            )}</p>
-          </section>
+              <div class="info-block remedy">
+                <h3>Recommended Remedy</h3>
+                <p>
+                  ${escapeHtml(
+                    defect.recommendedRemedy ||
+                      "Not provided."
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div class="info-block prevention">
+              <h3>Prevention</h3>
+              <p>
+                ${escapeHtml(
+                  defect.prevention ||
+                    "Not provided."
+                )}
+              </p>
+            </div>
+
+            ${
+              defect.coordinates
+                ? `
+                  <div class="coordinates">
+                    <strong>
+                      AI Location Marker:
+                    </strong>
+                    X: ${defect.coordinates.x},
+                    Y: ${defect.coordinates.y},
+                    W: ${defect.coordinates.width},
+                    H: ${defect.coordinates.height}
+                  </div>
+                `
+                : ""
+            }
+          </div>
         `
       )
       .join("");
 
-    reportWindow.document.write(`
+    const statusClass =
+      inspectionStatus === "Review Required"
+        ? "danger"
+        : inspectionStatus ===
+          "Review Recommended"
+        ? "warning"
+        : "normal";
+
+    const reportHtml = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>WeldScan Inspection Report</title>
+        <meta charset="UTF-8" />
+
+        <title>
+          WeldScan Inspection Report
+        </title>
 
         <style>
+          * {
+            box-sizing: border-box;
+          }
+
           body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            color: #111827;
-            line-height: 1.6;
+            margin: 0;
+            background: #eef2f7;
+            color: #172033;
+            font-family:
+              Arial,
+              Helvetica,
+              sans-serif;
+            line-height: 1.55;
           }
 
-          h1 {
+          .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 24px auto;
+            background: white;
+            padding: 28px 34px;
+            box-shadow:
+              0 8px 35px
+              rgba(15, 23, 42, 0.12);
+          }
+
+          .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #155eef;
+          }
+
+          .brand {
             color: #155eef;
+            font-size: 30px;
+            font-weight: 900;
+            letter-spacing: -1px;
           }
 
-          .meta {
-            background: #f3f6fb;
-            padding: 18px;
-            border-radius: 10px;
-            margin-bottom: 24px;
+          .subtitle {
+            margin-top: 4px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 700;
           }
 
-          .defect {
+          .report-id {
+            text-align: right;
+            font-size: 11px;
+            color: #64748b;
+          }
+
+          .report-id strong {
+            display: block;
+            color: #172033;
+            font-size: 13px;
+          }
+
+          .title {
+            margin: 26px 0 18px;
+          }
+
+          .title h1 {
+            margin: 0;
+            font-size: 25px;
+            color: #172033;
+          }
+
+          .title p {
+            margin: 5px 0 0;
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          .section-title {
+            margin-top: 28px;
+            margin-bottom: 10px;
+            padding-bottom: 7px;
+            border-bottom: 1px solid #dbe2ea;
+            color: #172033;
+            font-size: 16px;
+            font-weight: 900;
+          }
+
+          .meta-grid {
+            display: grid;
+            grid-template-columns:
+              repeat(2, 1fr);
             border: 1px solid #dbe2ea;
-            padding: 20px;
-            border-radius: 12px;
-            margin-top: 20px;
+            border-radius: 10px;
+            overflow: hidden;
           }
 
-          .warning {
-            background: #fff7ed;
-            border: 1px solid #fed7aa;
-            padding: 15px;
-            margin-top: 30px;
+          .meta-item {
+            padding: 12px 14px;
+            border-bottom: 1px solid #e2e8f0;
+          }
+
+          .meta-item:nth-child(odd) {
+            border-right: 1px solid #e2e8f0;
+          }
+
+          .meta-item span {
+            display: block;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+          }
+
+          .meta-item strong {
+            display: block;
+            margin-top: 3px;
+            font-size: 13px;
+          }
+
+          .summary-grid {
+            display: grid;
+            grid-template-columns:
+              repeat(4, 1fr);
+            gap: 10px;
+          }
+
+          .summary-card {
+            border: 1px solid #dbe2ea;
             border-radius: 10px;
+            padding: 13px;
+          }
+
+          .summary-card span {
+            display: block;
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+          }
+
+          .summary-card strong {
+            display: block;
+            margin-top: 5px;
+            font-size: 14px;
+          }
+
+          .status {
+            border-radius: 8px;
+            padding: 4px 8px;
+            display: inline-block;
+          }
+
+          .status.normal {
+            background: #dcfce7;
+            color: #166534;
+          }
+
+          .status.warning {
+            background: #ffedd5;
+            color: #9a3412;
+          }
+
+          .status.danger {
+            background: #fee2e2;
+            color: #991b1b;
+          }
+
+          .assessment {
+            border-left: 4px solid #155eef;
+            background: #eff6ff;
+            padding: 16px;
+            border-radius: 8px;
+          }
+
+          .assessment strong {
+            display: block;
+            color: #155eef;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+          }
+
+          .assessment p {
+            margin: 0;
+            font-size: 13px;
+          }
+
+          .defect-card {
+            border: 1px solid #dbe2ea;
+            border-radius: 12px;
+            padding: 18px;
+            margin-top: 16px;
+            page-break-inside: avoid;
+          }
+
+          .defect-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            align-items: flex-start;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 12px;
+          }
+
+          .defect-number {
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 1px;
+          }
+
+          .defect-header h2 {
+            margin: 3px 0 0;
+            font-size: 18px;
+          }
+
+          .severity {
+            border-radius: 7px;
+            background: #fff7ed;
+            color: #c2410c;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+          }
+
+          .grid {
+            display: grid;
+            grid-template-columns:
+              repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 14px;
+          }
+
+          .grid span {
+            display: block;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+          }
+
+          .grid strong {
+            display: block;
+            margin-top: 3px;
+            font-size: 12px;
+          }
+
+          .info-block {
+            margin-top: 14px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+          }
+
+          .info-block h3 {
+            margin: 0 0 5px;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #64748b;
+          }
+
+          .info-block p {
+            margin: 0;
+            font-size: 12px;
+          }
+
+          .two-column {
+            display: grid;
+            grid-template-columns:
+              repeat(2, 1fr);
+            gap: 12px;
+          }
+
+          .remedy {
+            background: #eff6ff;
+          }
+
+          .prevention {
+            background: #f0fdf4;
+          }
+
+          .coordinates {
+            margin-top: 12px;
+            padding: 9px 11px;
+            background: #fff1f2;
+            color: #be123c;
+            border-radius: 7px;
+            font-size: 10px;
+          }
+
+          .no-defect {
+            padding: 18px;
+            border: 1px solid #bbf7d0;
+            background: #f0fdf4;
+            color: #166534;
+            border-radius: 10px;
+            font-size: 13px;
+          }
+
+          .disclaimer {
+            margin-top: 28px;
+            border: 1px solid #fed7aa;
+            background: #fff7ed;
+            padding: 15px;
+            border-radius: 9px;
+            font-size: 10px;
+            color: #7c2d12;
+          }
+
+          .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #dbe2ea;
+            color: #64748b;
+            font-size: 9px;
+            text-align: center;
+          }
+
+          .print-button {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            border: 0;
+            border-radius: 9px;
+            background: #155eef;
+            color: white;
+            padding: 12px 18px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow:
+              0 6px 20px
+              rgba(21, 94, 239, .25);
           }
 
           @media print {
-            button {
+            body {
+              background: white;
+            }
+
+            .page {
+              width: auto;
+              min-height: auto;
+              margin: 0;
+              box-shadow: none;
+              padding: 20px;
+            }
+
+            .print-button {
               display: none;
             }
           }
@@ -548,96 +993,284 @@ export default function Home() {
 
       <body>
 
-        <h1>WeldScan Inspection Report</h1>
+        <div class="page">
 
-        <div class="meta">
-          <p><strong>NDT Method:</strong> ${escapeHtml(
-            ndtMethod
-          )}</p>
+          <div class="topbar">
 
-          <p><strong>Material:</strong> ${escapeHtml(
-            weldInfo.material || "Not provided"
-          )}</p>
+            <div>
+              <div class="brand">
+                WeldScan
+              </div>
 
-          <p><strong>Welding Process:</strong> ${escapeHtml(
-            weldInfo.weldingProcess || "Not provided"
-          )}</p>
+              <div class="subtitle">
+                AI-Assisted Weld Radiograph Inspection
+              </div>
+            </div>
 
-          <p><strong>Joint Type:</strong> ${escapeHtml(
-            weldInfo.jointType || "Not provided"
-          )}</p>
+            <div class="report-id">
+              REPORT ID
+              <strong>
+                ${reportId}
+              </strong>
 
-          <p><strong>Thickness:</strong> ${escapeHtml(
-            weldInfo.thickness || "Not provided"
-          )}</p>
+              <div style="margin-top:5px">
+                ${escapeHtml(
+                  inspectionDate
+                )}
+              </div>
+            </div>
 
-          <p><strong>Image Quality:</strong> ${escapeHtml(
-            result.imageQuality
-          )}</p>
+          </div>
 
-          <p><strong>Indications:</strong> ${
-            defects.length
-          }</p>
+          <div class="title">
+            <h1>
+              Non-Destructive Testing Inspection Report
+            </h1>
 
-          <p><strong>Highest Severity:</strong> ${escapeHtml(
-            highestSeverity
-          )}</p>
+            <p>
+              Preliminary AI-assisted radiographic
+              inspection record
+            </p>
+          </div>
 
-          <p><strong>Status:</strong> ${escapeHtml(
-            inspectionStatus
-          )}</p>
-        </div>
+          <div class="section-title">
+            Inspection Information
+          </div>
 
-        <h2>Overall Assessment</h2>
+          <div class="meta-grid">
 
-        <p>
-          ${escapeHtml(
-            result.overallAssessment
-          )}
-        </p>
+            <div class="meta-item">
+              <span>NDT Method</span>
+              <strong>
+                ${escapeHtml(ndtMethod)}
+                — Radiographic Testing
+              </strong>
+            </div>
 
-        <h2>Inspection Summary</h2>
+            <div class="meta-item">
+              <span>Image Quality</span>
+              <strong>
+                ${escapeHtml(
+                  result.imageQuality ||
+                    "Unclear"
+                )}
+              </strong>
+            </div>
 
-        <p>
-          ${escapeHtml(
-            result.inspectionSummary
-          )}
-        </p>
+            <div class="meta-item">
+              <span>Material</span>
+              <strong>
+                ${escapeHtml(
+                  weldInfo.material ||
+                    "Not provided"
+                )}
+              </strong>
+            </div>
 
-        <h2>Detected Indications</h2>
+            <div class="meta-item">
+              <span>Welding Process</span>
+              <strong>
+                ${escapeHtml(
+                  weldInfo.weldingProcess ||
+                    "Not provided"
+                )}
+              </strong>
+            </div>
 
-        ${
-          defectRows ||
-          "<p>No clear defect was identified.</p>"
-        }
+            <div class="meta-item">
+              <span>Joint Type</span>
+              <strong>
+                ${escapeHtml(
+                  weldInfo.jointType ||
+                    "Not provided"
+                )}
+              </strong>
+            </div>
 
-        <div class="warning">
-          <strong>AI Inspection Disclaimer</strong>
+            <div class="meta-item">
+              <span>Thickness</span>
+              <strong>
+                ${escapeHtml(
+                  weldInfo.thickness
+                    ? `${weldInfo.thickness} mm`
+                    : "Not provided"
+                )}
+              </strong>
+            </div>
 
-          <p>
-            WeldScan provides AI-assisted preliminary
-            radiographic inspection. Results must be reviewed
-            by a qualified NDT professional and must not be
-            treated as certified inspection results or final
-            code-compliance decisions.
+          </div>
+
+          <div class="section-title">
+            Inspection Summary
+          </div>
+
+          <div class="summary-grid">
+
+            <div class="summary-card">
+              <span>Indications</span>
+              <strong>
+                ${defects.length}
+              </strong>
+            </div>
+
+            <div class="summary-card">
+              <span>Highest Severity</span>
+              <strong>
+                ${escapeHtml(
+                  highestSeverity
+                )}
+              </strong>
+            </div>
+
+            <div class="summary-card">
+              <span>Status</span>
+              <strong>
+                <span class="status ${statusClass}">
+                  ${escapeHtml(
+                    inspectionStatus
+                  )}
+                </span>
+              </strong>
+            </div>
+
+            <div class="summary-card">
+              <span>AI Provider</span>
+              <strong>
+                ${escapeHtml(
+                  result.provider ||
+                    "AI Analysis"
+                )}
+              </strong>
+            </div>
+
+          </div>
+
+          <div class="section-title">
+            Overall Assessment
+          </div>
+
+          <div class="assessment">
+
+            <strong>
+              Preliminary Assessment
+            </strong>
+
+            <p>
+              ${escapeHtml(
+                result.overallAssessment ||
+                  "No assessment provided."
+              )}
+            </p>
+
+          </div>
+
+          <div class="section-title">
+            Inspection Narrative
+          </div>
+
+          <p style="
+            font-size:13px;
+            margin-top:0;
+          ">
+            ${escapeHtml(
+              result.inspectionSummary ||
+                "No inspection summary was provided."
+            )}
           </p>
+
+          <div class="section-title">
+            Detected Indications
+          </div>
+
+          ${
+            defectRows ||
+            `
+              <div class="no-defect">
+                <strong>
+                  No Clear Defect
+                </strong>
+
+                <div style="margin-top:4px">
+                  No significant radiographic
+                  indication was confidently identified
+                  by the AI system.
+                </div>
+              </div>
+            `
+          }
+
+          <div class="disclaimer">
+
+            <strong>
+              AI Inspection Disclaimer
+            </strong>
+
+            <p>
+              WeldScan provides AI-assisted preliminary
+              radiographic inspection only. The generated
+              findings are intended to support inspection
+              review and are not a substitute for qualified
+              NDT personnel, applicable inspection procedures,
+              acceptance criteria, standards, or certified
+              inspection records.
+            </p>
+
+            <p>
+              Final acceptance, rejection, repair decisions,
+              and code-compliance determinations must be made
+              by appropriately qualified personnel in
+              accordance with the applicable specification
+              and inspection procedure.
+            </p>
+
+          </div>
+
+          <div class="footer">
+
+            WeldScan — AI-Assisted Weld Radiograph Inspection
+            <br />
+
+            Preliminary inspection report •
+            Report ID: ${reportId}
+
+          </div>
+
         </div>
 
-        <br />
-
-        <button onclick="window.print()">
+        <button
+          class="print-button"
+          onclick="window.print()"
+        >
           Print / Save as PDF
         </button>
 
       </body>
       </html>
-    `);
+    `;
 
-    reportWindow.document.close();
+    try {
+      reportWindow.document.open();
+      reportWindow.document.write(
+        reportHtml
+      );
+      reportWindow.document.close();
 
-    setTimeout(() => {
-      reportWindow.print();
-    }, 500);
+      setTimeout(() => {
+        reportWindow.focus();
+        reportWindow.print();
+      }, 600);
+    } catch (err) {
+      console.error(
+        "Report generation failed:",
+        err
+      );
+
+      reportWindow.close();
+
+      setError(
+        "Could not generate the inspection report."
+      );
+    }
   }
 
   return (
@@ -675,47 +1308,54 @@ export default function Home() {
           border-color: #334155 !important;
         }
 
-        [data-theme="dark"] .border-slate-200,
-        [data-theme="dark"] .border-slate-300 {
+        [data-theme="dark"]
+        .border-slate-200,
+        [data-theme="dark"]
+        .border-slate-300 {
           border-color: #334155 !important;
         }
 
-        [data-theme="dark"] .text-slate-900 {
+        [data-theme="dark"]
+        .text-slate-900 {
           color: #f8fafc !important;
         }
 
-        [data-theme="dark"] .text-slate-800 {
+        [data-theme="dark"]
+        .text-slate-800 {
           color: #e2e8f0 !important;
         }
 
-        [data-theme="dark"] .text-slate-700 {
+        [data-theme="dark"]
+        .text-slate-700 {
           color: #cbd5e1 !important;
         }
 
-        [data-theme="dark"] .text-slate-600 {
+        [data-theme="dark"]
+        .text-slate-600 {
           color: #94a3b8 !important;
         }
 
-        [data-theme="dark"] .text-slate-500 {
+        [data-theme="dark"]
+        .text-slate-500 {
           color: #94a3b8 !important;
         }
 
-        [data-theme="dark"] .text-slate-400 {
+        [data-theme="dark"]
+        .text-slate-400 {
           color: #64748b !important;
         }
 
-        [data-theme="dark"] .hover\\:bg-slate-50:hover {
-          background-color: #1e293b !important;
-        }
-
-        [data-theme="dark"] input,
-        [data-theme="dark"] select {
+        [data-theme="dark"]
+        input,
+        [data-theme="dark"]
+        select {
           background-color: #0f172a !important;
           color: #f8fafc !important;
           border-color: #334155 !important;
         }
 
-        [data-theme="dark"] input::placeholder {
+        [data-theme="dark"]
+        input::placeholder {
           color: #64748b !important;
         }
 
@@ -728,19 +1368,23 @@ export default function Home() {
           background-color: #172554 !important;
         }
 
-        [data-theme="dark"] .text-blue-950 {
+        [data-theme="dark"]
+        .text-blue-950 {
           color: #dbeafe !important;
         }
 
-        [data-theme="dark"] .text-blue-800 {
+        [data-theme="dark"]
+        .text-blue-800 {
           color: #bfdbfe !important;
         }
 
-        [data-theme="dark"] .text-blue-700 {
+        [data-theme="dark"]
+        .text-blue-700 {
           color: #93c5fd !important;
         }
 
-        [data-theme="dark"] .border-blue-100 {
+        [data-theme="dark"]
+        .border-blue-100 {
           border-color: #1e3a8a !important;
         }
 
@@ -748,19 +1392,23 @@ export default function Home() {
           background-color: #052e16 !important;
         }
 
-        [data-theme="dark"] .text-green-950 {
+        [data-theme="dark"]
+        .text-green-950 {
           color: #dcfce7 !important;
         }
 
-        [data-theme="dark"] .text-green-700 {
+        [data-theme="dark"]
+        .text-green-700 {
           color: #86efac !important;
         }
 
-        [data-theme="dark"] .text-green-800 {
+        [data-theme="dark"]
+        .text-green-800 {
           color: #bbf7d0 !important;
         }
 
-        [data-theme="dark"] .border-green-200 {
+        [data-theme="dark"]
+        .border-green-200 {
           border-color: #166534 !important;
         }
 
@@ -768,19 +1416,13 @@ export default function Home() {
           background-color: #450a0a !important;
         }
 
-        [data-theme="dark"] .text-red-700 {
+        [data-theme="dark"]
+        .text-red-700 {
           color: #fca5a5 !important;
         }
 
-        [data-theme="dark"] .text-red-600 {
-          color: #f87171 !important;
-        }
-
-        [data-theme="dark"] .border-red-100 {
-          border-color: #7f1d1d !important;
-        }
-
-        [data-theme="dark"] .border-red-200 {
+        [data-theme="dark"]
+        .border-red-200 {
           border-color: #991b1b !important;
         }
 
@@ -788,7 +1430,8 @@ export default function Home() {
           background-color: #431407 !important;
         }
 
-        [data-theme="dark"] .text-orange-700 {
+        [data-theme="dark"]
+        .text-orange-700 {
           color: #fdba74 !important;
         }
 
@@ -796,7 +1439,6 @@ export default function Home() {
           background-color: #020617 !important;
         }
       `}</style>
-
 
       {/* =========================
           HEADER
@@ -821,10 +1463,7 @@ export default function Home() {
             </div>
           </div>
 
-
           <div className="flex items-center gap-3">
-
-            {/* THEME SELECTOR */}
 
             <div
               className={`flex items-center gap-1 rounded-xl border p-1 ${
@@ -836,7 +1475,9 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={() => setTheme("light")}
+                onClick={() =>
+                  setTheme("light")
+                }
                 title="Day mode"
                 className={`rounded-lg px-3 py-2 text-sm transition ${
                   theme === "light"
@@ -849,10 +1490,11 @@ export default function Home() {
                 ☀️
               </button>
 
-
               <button
                 type="button"
-                onClick={() => setTheme("system")}
+                onClick={() =>
+                  setTheme("system")
+                }
                 title="System default"
                 className={`rounded-lg px-3 py-2 text-sm transition ${
                   theme === "system"
@@ -865,10 +1507,11 @@ export default function Home() {
                 🖥️
               </button>
 
-
               <button
                 type="button"
-                onClick={() => setTheme("dark")}
+                onClick={() =>
+                  setTheme("dark")
+                }
                 title="Dark mode"
                 className={`rounded-lg px-3 py-2 text-sm transition ${
                   theme === "dark"
@@ -882,9 +1525,6 @@ export default function Home() {
               </button>
 
             </div>
-
-
-            {/* DYNAMIC NDT BADGE */}
 
             <div
               className={`hidden rounded-full border px-4 py-2 text-xs font-bold sm:block ${
@@ -901,7 +1541,6 @@ export default function Home() {
         </div>
       </header>
 
-
       <div className="mx-auto max-w-7xl px-6 py-8">
 
         {/* ERROR */}
@@ -912,18 +1551,15 @@ export default function Home() {
           </div>
         )}
 
-
         {/* MAIN GRID */}
 
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
 
-
           {/* =========================
-              LEFT CONTROL PANEL
+              LEFT PANEL
           ========================= */}
 
           <aside className="space-y-6">
-
 
             {/* UPLOAD */}
 
@@ -939,28 +1575,22 @@ export default function Home() {
                 </p>
               </div>
 
-
               {!previewUrl ? (
-
                 <div
                   onDragOver={(event) => {
                     event.preventDefault();
                     setDragActive(true);
                   }}
-
                   onDragLeave={() =>
                     setDragActive(false)
                   }
-
                   onDrop={handleDrop}
-
                   onClick={() =>
                     fileInputRef.current?.click()
                   }
-
                   className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition ${
                     dragActive
-                      ? "border-blue-600 bg-blue-50 shadow-lg shadow-blue-100"
+                      ? "border-blue-600 bg-blue-50 shadow-lg"
                       : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"
                   }`}
                 >
@@ -986,9 +1616,7 @@ export default function Home() {
                   </div>
 
                 </div>
-
               ) : (
-
                 <div className="overflow-hidden rounded-2xl border bg-slate-950">
 
                   <img
@@ -1016,7 +1644,6 @@ export default function Home() {
                     </button>
 
                   </div>
-
                 </div>
               )}
 
@@ -1030,7 +1657,6 @@ export default function Home() {
 
             </section>
 
-
             {/* WELD INFORMATION */}
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -1042,7 +1668,6 @@ export default function Home() {
               <p className="mb-5 text-sm text-slate-500">
                 Optional information for better inspection context.
               </p>
-
 
               <div className="space-y-4">
 
@@ -1056,7 +1681,8 @@ export default function Home() {
                     onChange={(e) =>
                       setWeldInfo({
                         ...weldInfo,
-                        material: e.target.value,
+                        material:
+                          e.target.value,
                       })
                     }
                     placeholder="e.g. Carbon Steel"
@@ -1064,18 +1690,20 @@ export default function Home() {
                   />
                 </div>
 
-
                 <div>
                   <label className="mb-2 block text-sm font-bold">
                     Welding Process
                   </label>
 
                   <select
-                    value={weldInfo.weldingProcess}
+                    value={
+                      weldInfo.weldingProcess
+                    }
                     onChange={(e) =>
                       setWeldInfo({
                         ...weldInfo,
-                        weldingProcess: e.target.value,
+                        weldingProcess:
+                          e.target.value,
                       })
                     }
                     className="w-full rounded-xl border bg-white px-4 py-3 outline-none focus:border-blue-500"
@@ -1083,17 +1711,17 @@ export default function Home() {
                     <option value="">
                       Select
                     </option>
-
                     <option>SMAW</option>
                     <option>GMAW</option>
                     <option>GTAW</option>
                     <option>FCAW</option>
                     <option>SAW</option>
-                    <option>Robotic Welding</option>
+                    <option>
+                      Robotic Welding
+                    </option>
                     <option>Other</option>
                   </select>
                 </div>
-
 
                 <div>
                   <label className="mb-2 block text-sm font-bold">
@@ -1101,11 +1729,14 @@ export default function Home() {
                   </label>
 
                   <select
-                    value={weldInfo.jointType}
+                    value={
+                      weldInfo.jointType
+                    }
                     onChange={(e) =>
                       setWeldInfo({
                         ...weldInfo,
-                        jointType: e.target.value,
+                        jointType:
+                          e.target.value,
                       })
                     }
                     className="w-full rounded-xl border bg-white px-4 py-3 outline-none focus:border-blue-500"
@@ -1113,7 +1744,6 @@ export default function Home() {
                     <option value="">
                       Select
                     </option>
-
                     <option>Butt Joint</option>
                     <option>Fillet Joint</option>
                     <option>Lap Joint</option>
@@ -1124,7 +1754,6 @@ export default function Home() {
                   </select>
                 </div>
 
-
                 <div>
                   <label className="mb-2 block text-sm font-bold">
                     Thickness
@@ -1133,11 +1762,14 @@ export default function Home() {
                   <div className="flex">
 
                     <input
-                      value={weldInfo.thickness}
+                      value={
+                        weldInfo.thickness
+                      }
                       onChange={(e) =>
                         setWeldInfo({
                           ...weldInfo,
-                          thickness: e.target.value,
+                          thickness:
+                            e.target.value,
                         })
                       }
                       placeholder="e.g. 10"
@@ -1152,14 +1784,9 @@ export default function Home() {
                 </div>
 
               </div>
-
             </section>
 
-
-            {/* =========================
-                NDT METHOD
-                RT AVAILABLE / UT COMING SOON
-            ========================= */}
+            {/* NDT METHOD */}
 
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
 
@@ -1171,10 +1798,9 @@ export default function Home() {
                 Select the NDT method for this inspection.
               </p>
 
-
               <div className="grid grid-cols-2 gap-2">
 
-                {/* RT — AVAILABLE */}
+                {/* RT AVAILABLE */}
 
                 <button
                   type="button"
@@ -1202,8 +1828,7 @@ export default function Home() {
 
                 </button>
 
-
-                {/* UT — COMING SOON */}
+                {/* UT COMING SOON */}
 
                 <button
                   type="button"
@@ -1231,24 +1856,23 @@ export default function Home() {
 
             </section>
 
-
-            {/* ANALYZE BUTTON */}
+            {/* ANALYZE */}
 
             <button
               type="button"
               onClick={analyzeImage}
-              disabled={!file || isAnalyzing}
+              disabled={
+                !file || isAnalyzing
+              }
               className="w-full rounded-2xl bg-blue-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
             >
-
               {isAnalyzing
-                ? stageText || "Analyzing..."
+                ? stageText ||
+                  "Analyzing..."
                 : "Analyze Radiograph"}
-
             </button>
 
-
-            {/* ANALYSIS PROGRESS */}
+            {/* PROGRESS */}
 
             {isAnalyzing && (
               <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -1260,82 +1884,97 @@ export default function Home() {
                 <div className="space-y-3">
 
                   {[
-                    ["reading", "Reading image"],
-                    ["inspecting", "Inspecting weld"],
-                    ["identifying", "Identifying indications"],
-                    ["reporting", "Preparing report"],
-                  ].map(([key, label]) => {
-
-                    const stages = [
+                    [
                       "reading",
+                      "Reading image",
+                    ],
+                    [
                       "inspecting",
+                      "Inspecting weld",
+                    ],
+                    [
                       "identifying",
+                      "Identifying indications",
+                    ],
+                    [
                       "reporting",
-                    ];
+                      "Preparing report",
+                    ],
+                  ].map(
+                    ([key, label]) => {
 
-                    const currentIndex =
-                      stages.indexOf(stage);
+                      const stages = [
+                        "reading",
+                        "inspecting",
+                        "identifying",
+                        "reporting",
+                      ];
 
-                    const itemIndex =
-                      stages.indexOf(key);
+                      const currentIndex =
+                        stages.indexOf(stage);
 
-                    const active =
-                      itemIndex <= currentIndex;
+                      const itemIndex =
+                        stages.indexOf(key);
 
-                    return (
-                      <div
-                        key={key}
-                        className={`flex items-center gap-3 ${
-                          active
-                            ? "text-blue-700"
-                            : "text-slate-400"
-                        }`}
-                      >
+                      const active =
+                        itemIndex <=
+                        currentIndex;
 
+                      return (
                         <div
-                          className={`h-3 w-3 rounded-full ${
+                          key={key}
+                          className={`flex items-center gap-3 ${
                             active
-                              ? "bg-blue-600"
-                              : "bg-slate-200"
+                              ? "text-blue-700"
+                              : "text-slate-400"
                           }`}
-                        />
+                        >
 
-                        <span className="text-sm font-semibold">
-                          {label}
-                        </span>
+                          <div
+                            className={`h-3 w-3 rounded-full ${
+                              active
+                                ? "bg-blue-600"
+                                : "bg-slate-200"
+                            }`}
+                          />
 
-                      </div>
-                    );
-                  })}
+                          <span className="text-sm font-semibold">
+                            {label}
+                          </span>
+
+                        </div>
+                      );
+                    }
+                  )}
 
                 </div>
-
               </section>
             )}
-
 
             {/* NOTICE */}
 
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
 
-              <strong>Inspection Notice:</strong>{" "}
-              WeldScan provides AI-assisted preliminary
-              inspection. Results should be reviewed by a
-              qualified NDT professional and must not be
-              treated as certified inspection results or
-              final code-compliance decisions.
+              <strong>
+                Inspection Notice:
+              </strong>{" "}
+
+              WeldScan provides AI-assisted
+              preliminary inspection. Results should
+              be reviewed by a qualified NDT professional
+              and must not be treated as certified
+              inspection results or final code-compliance
+              decisions.
 
             </div>
 
           </aside>
-
 
           {/* =========================
               RIGHT SIDE
           ========================= */}
 
           <section className="space-y-6">
-
 
             {/* DASHBOARD */}
 
@@ -1353,7 +1992,6 @@ export default function Home() {
                   </div>
                 </div>
 
-
                 <div className="rounded-2xl border bg-white p-5 shadow-sm">
                   <div className="text-xs font-bold uppercase text-slate-400">
                     Indications
@@ -1363,7 +2001,6 @@ export default function Home() {
                     {defects.length}
                   </div>
                 </div>
-
 
                 <div className="rounded-2xl border bg-white p-5 shadow-sm">
 
@@ -1381,7 +2018,6 @@ export default function Home() {
 
                 </div>
 
-
                 <div className="rounded-2xl border bg-white p-5 shadow-sm">
 
                   <div className="text-xs font-bold uppercase text-slate-400">
@@ -1396,7 +2032,6 @@ export default function Home() {
 
               </div>
             )}
-
 
             {/* VIEWER */}
 
@@ -1416,14 +2051,15 @@ export default function Home() {
                   </p>
                 </div>
 
-
                 {previewUrl && (
                   <div className="flex items-center gap-2">
 
                     <button
                       type="button"
                       onClick={() =>
-                        setViewMode("original")
+                        setViewMode(
+                          "original"
+                        )
                       }
                       className={`rounded-lg px-3 py-2 text-sm font-bold ${
                         viewMode === "original"
@@ -1437,7 +2073,9 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() =>
-                        setViewMode("enhanced")
+                        setViewMode(
+                          "enhanced"
+                        )
                       }
                       className={`rounded-lg px-3 py-2 text-sm font-bold ${
                         viewMode === "enhanced"
@@ -1453,12 +2091,11 @@ export default function Home() {
 
               </div>
 
-
               {!previewUrl ? (
-
                 <div className="flex min-h-[500px] items-center justify-center rounded-2xl bg-slate-950 text-center text-slate-400">
 
                   <div>
+
                     <div className="text-5xl">
                       ◉
                     </div>
@@ -1466,12 +2103,11 @@ export default function Home() {
                     <div className="mt-4 font-bold">
                       Upload a radiograph to begin
                     </div>
+
                   </div>
 
                 </div>
-
               ) : (
-
                 <div className="overflow-auto rounded-2xl bg-black p-4">
 
                   <div className="relative mx-auto w-fit max-w-full">
@@ -1481,39 +2117,54 @@ export default function Home() {
                       alt="Weld radiograph"
                       style={{
                         width: `${zoom}%`,
-                        maxWidth: "none",
+                        maxWidth:
+                          "none",
                         filter:
-                          viewMode === "enhanced"
+                          viewMode ===
+                          "enhanced"
                             ? "contrast(1.35) brightness(1.08)"
                             : "none",
                       }}
                       className="block h-auto"
                     />
 
-
                     {result?.defects?.map(
-                      (defect, index) => {
+                      (
+                        defect,
+                        index
+                      ) => {
 
                         const c =
                           defect.coordinates;
 
-                        if (!c) return null;
+                        if (!c) {
+                          return null;
+                        }
 
                         return (
                           <div
                             key={`marker-${index}`}
                             className="pointer-events-none absolute border-[3px] border-red-500 bg-red-500/10 shadow-[0_0_12px_rgba(239,68,68,0.9)]"
                             style={{
-                              left: `${c.x / 10}%`,
-                              top: `${c.y / 10}%`,
-                              width: `${c.width / 10}%`,
-                              height: `${c.height / 10}%`,
+                              left: `${
+                                c.x / 10
+                              }%`,
+                              top: `${
+                                c.y / 10
+                              }%`,
+                              width: `${
+                                c.width / 10
+                              }%`,
+                              height: `${
+                                c.height / 10
+                              }%`,
                             }}
                           >
 
                             <div className="absolute -top-8 left-0 whitespace-nowrap rounded-md bg-red-600 px-2 py-1 text-xs font-black text-white shadow-lg">
 
                               {index + 1}.{" "}
+
                               {defect.defectType ||
                                 "Indication"}
 
@@ -1529,9 +2180,7 @@ export default function Home() {
                   </div>
 
                 </div>
-
               )}
-
 
               {previewUrl && (
                 <div className="mt-4 flex items-center justify-center gap-2">
@@ -1540,7 +2189,10 @@ export default function Home() {
                     type="button"
                     onClick={() =>
                       setZoom(
-                        Math.max(50, zoom - 10)
+                        Math.max(
+                          50,
+                          zoom - 10
+                        )
                       )
                     }
                     className="rounded-lg border px-4 py-2 font-bold"
@@ -1556,7 +2208,10 @@ export default function Home() {
                     type="button"
                     onClick={() =>
                       setZoom(
-                        Math.min(200, zoom + 10)
+                        Math.min(
+                          200,
+                          zoom + 10
+                        )
                       )
                     }
                     className="rounded-lg border px-4 py-2 font-bold"
@@ -1579,7 +2234,6 @@ export default function Home() {
 
             </section>
 
-
             {/* RESULTS */}
 
             {result && (
@@ -1598,17 +2252,17 @@ export default function Home() {
                     </p>
                   </div>
 
-
                   <button
                     type="button"
-                    onClick={generateReport}
+                    onClick={
+                      generateReport
+                    }
                     className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700"
                   >
                     Generate Inspection Report
                   </button>
 
                 </div>
-
 
                 {/* OVERALL */}
 
@@ -1619,11 +2273,11 @@ export default function Home() {
                   </div>
 
                   <p className="mt-2 font-semibold text-slate-800">
-                    {result.overallAssessment}
+                    {result.overallAssessment ||
+                      "No assessment provided."}
                   </p>
 
                 </div>
-
 
                 {/* SUMMARY */}
 
@@ -1634,11 +2288,11 @@ export default function Home() {
                   </div>
 
                   <p className="mt-2 leading-7 text-slate-700">
-                    {result.inspectionSummary}
+                    {result.inspectionSummary ||
+                      "No inspection summary provided."}
                   </p>
 
                 </div>
-
 
                 {/* DEFECTS */}
 
@@ -1666,9 +2320,7 @@ export default function Home() {
 
                   </div>
 
-
                   {defects.length === 0 ? (
-
                     <div className="rounded-2xl border border-green-200 bg-green-50 p-6">
 
                       <div className="text-lg font-black text-green-700">
@@ -1682,14 +2334,14 @@ export default function Home() {
                       </p>
 
                     </div>
-
                   ) : (
-
                     <div className="space-y-5">
 
                       {defects.map(
-                        (defect, index) => (
-
+                        (
+                          defect,
+                          index
+                        ) => (
                           <article
                             key={index}
                             className="rounded-2xl border p-5"
@@ -1719,22 +2371,22 @@ export default function Home() {
                                 </div>
 
                                 <p className="mt-2 text-sm text-slate-500">
-                                  {defect.location}
+                                  {defect.location ||
+                                    "Location not specified"}
                                 </p>
 
                               </div>
-
 
                               <div
                                 className={`rounded-lg border px-3 py-1 text-sm font-black ${severityClass(
                                   defect.severity
                                 )}`}
                               >
-                                {defect.severity}
+                                {defect.severity ||
+                                  "Unclear"}
                               </div>
 
                             </div>
-
 
                             {/* CONFIDENCE */}
 
@@ -1761,20 +2413,31 @@ export default function Home() {
                                     width:
                                       typeof defect.confidence ===
                                       "number"
-                                        ? `${defect.confidence}%`
-                                        : `${Number.parseFloat(
-                                            String(
-                                              defect.confidence ||
-                                                "0"
+                                        ? `${Math.max(
+                                            0,
+                                            Math.min(
+                                              100,
+                                              defect.confidence
                                             )
-                                          ) || 0}%`,
+                                          )}%`
+                                        : `${Math.max(
+                                            0,
+                                            Math.min(
+                                              100,
+                                              Number.parseFloat(
+                                                String(
+                                                  defect.confidence ||
+                                                    "0"
+                                                )
+                                              ) || 0
+                                            )
+                                          )}%`,
                                   }}
                                 />
 
                               </div>
 
                             </div>
-
 
                             <div className="mt-6 grid gap-4 md:grid-cols-2">
 
@@ -1785,11 +2448,11 @@ export default function Home() {
                                 </div>
 
                                 <p className="mt-2 text-sm leading-6">
-                                  {defect.evidence}
+                                  {defect.evidence ||
+                                    "Not provided."}
                                 </p>
 
                               </div>
-
 
                               <div className="rounded-xl bg-slate-50 p-4">
 
@@ -1798,11 +2461,11 @@ export default function Home() {
                                 </div>
 
                                 <p className="mt-2 text-sm leading-6">
-                                  {defect.description}
+                                  {defect.description ||
+                                    "Not provided."}
                                 </p>
 
                               </div>
-
 
                               <div className="rounded-xl bg-slate-50 p-4">
 
@@ -1811,11 +2474,11 @@ export default function Home() {
                                 </div>
 
                                 <p className="mt-2 text-sm leading-6">
-                                  {defect.possibleCause}
+                                  {defect.possibleCause ||
+                                    "Not provided."}
                                 </p>
 
                               </div>
-
 
                               <div className="rounded-xl bg-blue-50 p-4">
 
@@ -1824,11 +2487,11 @@ export default function Home() {
                                 </div>
 
                                 <p className="mt-2 text-sm leading-6 text-blue-950">
-                                  {defect.recommendedRemedy}
+                                  {defect.recommendedRemedy ||
+                                    "Not provided."}
                                 </p>
 
                               </div>
-
 
                               <div className="rounded-xl bg-green-50 p-4 md:col-span-2">
 
@@ -1837,15 +2500,13 @@ export default function Home() {
                                 </div>
 
                                 <p className="mt-2 text-sm leading-6 text-green-950">
-                                  {defect.prevention}
+                                  {defect.prevention ||
+                                    "Not provided."}
                                 </p>
 
                               </div>
 
                             </div>
-
-
-                            {/* COORDINATE INFO */}
 
                             {defect.coordinates && (
                               <div className="mt-4 rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
@@ -1871,19 +2532,16 @@ export default function Home() {
                             )}
 
                           </article>
-
                         )
                       )}
 
                     </div>
-
                   )}
 
                 </div>
 
               </section>
             )}
-
 
             {/* EMPTY STATE */}
 
@@ -1902,7 +2560,9 @@ export default function Home() {
 
                 <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
 
-                  <strong>Current Method:</strong>{" "}
+                  <strong>
+                    Current Method:
+                  </strong>{" "}
                   Radiographic Testing (RT)
 
                 </div>
@@ -1913,7 +2573,6 @@ export default function Home() {
           </section>
 
         </div>
-
 
         {/* FOOTER */}
 
